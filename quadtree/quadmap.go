@@ -80,6 +80,22 @@ func (qm *QuadMap) GetTileForSlippy(x int32, y int32, z byte) (*Tile, bool, erro
 	return ancestorTile, false, nil
 }
 
+// GetExactTileForSlippy returns tile for slippy co-ord match. Does NOT traverse up the ancestry
+func (qm *QuadMap) GetExactTileForSlippy(x int32, y int32, z byte) (*Tile, error) {
+	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
+	return qm.GetExactTileForQuadKey(quadKey)
+}
+
+// GetExactTileForQuadKey returns tile for quadkey match. Does NOT traverse up the ancestry
+func (qm *QuadMap) GetExactTileForQuadKey(quadKey uint64) (*Tile, error) {
+
+	// if actual quadkey exists, return tile.
+	if t, ok := qm.quadKeyMap[quadKey]; ok {
+		return t, nil
+	}
+	return nil, errors.New("no tile found")
+}
+
 // traverseForTileOrParent returns tile for quadkey OR parent tile if quadkey does not exist
 // AND the parent has the full flag set. Otherwise returns not found error
 func (qm *QuadMap) traverseForTileOrFullParent(quadKey uint64) (*Tile, error) {
