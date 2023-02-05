@@ -58,7 +58,13 @@ func NewTile(x int32, y int32, z byte) *Tile {
 }
 
 func (t *Tile) SetTileType(groupID string, tt TileType) {
-	t.groupIDs[groupID].Types |= 1 << uint(tt)
+	var g *GroupDetails
+	var ok bool
+	if g, ok = t.groupIDs[groupID]; !ok {
+		g = &GroupDetails{GroupID: groupID, Types: 1 << uint(tt)}
+	}
+	g.Types |= 1 << uint(tt)
+	t.groupIDs[groupID] = g
 }
 
 func (t *Tile) HasTileType(groupID string, tt TileType) bool {
