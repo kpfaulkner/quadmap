@@ -96,11 +96,26 @@ func (qm *QuadMap) AddTile(t *Tile) error {
 
 // AddChild adds a child to tile t, in position pos.
 // Returns created (and registered in quadmap) child tile
-func (qm *QuadMap) AddChild(t *Tile, pos int) (*Tile, error) {
+func (qm *QuadMap) AddChild(t *Tile, pos int, groupID string, tileType TileType) (*Tile, error) {
+	quadKey, err := GetChildQuadKeyForPos(t.QuadKey, pos)
+	if err != nil {
+		return nil, err
+	}
+
+	if quadKey == 14987979559889010690 {
+		fmt.Printf("boom\n")
+	}
+	// check if child exists.
+	if child, ok := qm.quadKeyMap[quadKey]; ok {
+		child.SetTileType(groupID, tileType)
+		return child, nil
+	}
+
 	child, err := createChildForPos(t, pos)
 	if err != nil {
 		return nil, err
 	}
+	child.SetTileType(groupID, tileType)
 	qm.quadKeyMap[child.QuadKey] = child
 	return child, nil
 }
@@ -113,6 +128,7 @@ func createChildForPos(t *Tile, pos int) (*Tile, error) {
 		return nil, err
 	}
 	child := &Tile{QuadKey: quadKey}
+	child.groupIDs = make(map[string]*GroupDetails)
 	return child, nil
 }
 
@@ -193,6 +209,9 @@ func (qm *QuadMap) GetTileDetailsForQuadkey(quadKey uint64, tileDetails *TileDet
 
 			// get group details.
 			group := tileDetails.GroupIDs[k]
+			if group.full == nil {
+				group.full = make(map[TileType]bool)
+			}
 
 			shouldStore := false
 
@@ -207,7 +226,12 @@ func (qm *QuadMap) GetTileDetailsForQuadkey(quadKey uint64, tileDetails *TileDet
 			// store only if we're either the actual level we want... OR we've had a full group/tiletype combination.
 			if shouldStore {
 				group.Types |= v.Types
+				if tileDetails.GroupIDs == nil {
+					tileDetails.GroupIDs = make(map[string]GroupDetails)
+				}
+				group.GroupID = k
 				tileDetails.GroupIDs[k] = group
+				tileDetails.QuadKey = quadKey
 			}
 		}
 	}

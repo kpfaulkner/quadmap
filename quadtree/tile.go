@@ -4,7 +4,8 @@ type TileType uint16
 
 const (
 	// only use vert for now
-	TileTypeVert TileType = iota
+	TileTypeVert TileType = 0b00000000000000001
+	TileTypeEast TileType = 0b00000000000000010
 )
 
 type GroupDetails struct {
@@ -61,9 +62,9 @@ func (t *Tile) SetTileType(groupID string, tt TileType) {
 	var g *GroupDetails
 	var ok bool
 	if g, ok = t.groupIDs[groupID]; !ok {
-		g = &GroupDetails{GroupID: groupID, Types: 1 << uint(tt)}
+		g = &GroupDetails{GroupID: groupID, Types: uint16(tt)}
 	}
-	g.Types |= 1 << uint(tt)
+	g.Types |= uint16(tt)
 	t.groupIDs[groupID] = g
 }
 
@@ -78,10 +79,18 @@ func (t *Tile) GetTileZoomLevel() byte {
 // SetFullForTileType sets the full flag for a given tile type.
 // Only creates Full map at this stage (saves us creating a potential mass of unused maps)
 func (t *Tile) SetFullForTileType(groupID string, tileType TileType, full bool) error {
-	if t.groupIDs[groupID].full == nil {
-		t.groupIDs[groupID].full = make(map[TileType]bool)
+	var g *GroupDetails
+	var ok bool
+	if g, ok = t.groupIDs[groupID]; !ok {
+		g = &GroupDetails{}
+		t.groupIDs[groupID] = g
 	}
 
+	g.Types |= uint16(tileType)
+	if g.full == nil {
+		g.full = make(map[TileType]bool)
+		t.groupIDs[groupID] = g
+	}
 	t.groupIDs[groupID].full[tileType] = full
 	return nil
 }
