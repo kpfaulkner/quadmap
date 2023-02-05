@@ -56,66 +56,6 @@ func (qm *QuadMap) GetChildInPos(t *Tile, pos int) (*Tile, error) {
 	return childTile, nil
 }
 
-// GetTileForSlippy returns tile details for slippy co-ord OR error if none available.
-// It will either return the tile requested OR an ancestor that is full
-// The process is:
-//
-//   - convert slippy to quadkey
-//
-//   - if quadkey exists, return tile
-//
-//   - if quadkey does not exist, get parent quadkey
-//
-//   - if parent quadkey exists and is full, return parent details
-//
-//   - loop until no parent.
-//
-//     What happens if we hit a parent that is NOT full? No tile therefore return error?
-//     Returns tile (actual or parent), bool indicating if actual (true == actual, false == ancestor) and error
-func (qm *QuadMap) GetTileForSlippy(x int32, y int32, z byte) (*Tile, bool, error) {
-
-	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
-
-	// if actual quadkey exists, return tile.
-	if t, ok := qm.quadKeyMap[quadKey]; ok {
-		return t, true, nil
-	}
-
-	// check parents and upwards
-	ancestorTile, err := qm.traverseForTileOrFullParent(quadKey)
-	if err != nil {
-		return nil, false, err
-	}
-
-	// have a result...  but need to return indicating its an ancestor that is full
-	return ancestorTile, false, nil
-}
-
-// traverseForTileOrParent returns tile for quadkey OR parent tile if quadkey does not exist
-// AND the parent has the full flag set. Otherwise returns not found error
-func (qm *QuadMap) traverseForTileOrFullParent(quadKey uint64) (*Tile, error) {
-
-	// if quadkey has zoom of 0...  then we're out of luck and just return error
-	if GetTileZoomLevel(quadKey) == 0 {
-		return nil, errors.New("no tile found")
-	}
-
-	if t, ok := qm.quadKeyMap[quadKey]; ok {
-		if t.Full {
-			return t, nil
-		}
-		return nil, errors.New("no tile found")
-	}
-
-	// get parent key and recurse
-	parentKey, err := GetParentQuadKey(quadKey)
-	if err != nil {
-		return nil, err
-	}
-
-	return qm.traverseForTileOrFullParent(parentKey)
-}
-
 // GetExactTileForSlippy returns tile for slippy co-ord match. Does NOT traverse up the ancestry
 func (qm *QuadMap) GetExactTileForSlippy(x int32, y int32, z byte) (*Tile, error) {
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
@@ -180,12 +120,12 @@ func createChildForPos(t *Tile, pos int) (*Tile, error) {
 // slippy co-ords but also matching the tiletype and groupID.
 func (qm *QuadMap) HaveTileForSlippyTileTypeAndGroupID(x int32, y int32, z byte, tileType TileType, groupID string) (bool, error) {
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
-	return qm.HaveTileForTypeAndGroupID(quadKey, tileType, groupID)
+	return qm.HaveTileForTypeAndGroupID(quadKey, tileType, groupID, true)
 }
 
 // HaveTileForTypeAndGroupID returns bool indicating if we have details for a tile at the provided
 // quadKey provided but also matching the tiletype and groupID.
-// It will either return the tile requested OR an ancestor that is full
+// It will return true if tile requested is found OR an ancestor that is FULL
 // The process is:
 //
 //   - if quadkey exists, groupID exists and tiletype exists, return true
@@ -200,13 +140,15 @@ func (qm *QuadMap) HaveTileForSlippyTileTypeAndGroupID(x int32, y int32, z byte,
 //
 //     What happens if we hit a parent that is NOT full? No tile therefore return error?
 //     Returns tile (actual or parent), bool indicating if actual (true == actual, false == ancestor) and error
-func (qm *QuadMap) HaveTileForTypeAndGroupID(quadKey uint64, tileType TileType, groupID string) (bool, error) {
+func (qm *QuadMap) HaveTileForTypeAndGroupID(quadKey uint64, tileType TileType, groupID string, actualTile bool) (bool, error) {
 
 	// if actual quadkey exists, check tiletype and groupID
 	if t, ok := qm.quadKeyMap[quadKey]; ok {
 		if g, ok := t.groupIDs[groupID]; ok {
 			if g.Types&uint16(tileType) != 0 {
-				return true, nil
+				if g.full[tileType] || actualTile {
+					return true, nil
+				}
 			}
 		}
 	}
@@ -216,8 +158,8 @@ func (qm *QuadMap) HaveTileForTypeAndGroupID(quadKey uint64, tileType TileType, 
 		return false, err
 	}
 
-	// check parents and upwards
-	found, err := qm.HaveTileForTypeAndGroupID(parentQuadKey, tileType, groupID)
+	// check parents and upwards. actualTile is false since we're querying ancestors
+	found, err := qm.HaveTileForTypeAndGroupID(parentQuadKey, tileType, groupID, false)
 	if err != nil {
 		return false, err
 	}
