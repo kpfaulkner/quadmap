@@ -1,32 +1,50 @@
 package quadtree
 
-import "fmt"
-
-type TileType int
+type TileType uint16
 
 const (
 	// only use vert for now
 	TileTypeVert TileType = iota
 )
 
-// Tile is a node within a quadtree.
-// Should shuffle these around for byte padding.... but not yet.
-type Tile struct {
-	// stupid to keep it in here?
-	// Will also store the zoom level in the key.
-	QuadKey uint64
+type GroupDetails struct {
+
+	// GroupID... probably not required since it should be used as a map key to access this.
+	// TODO(kpfaulkner) confirm if this is required.
+	GroupID string
 
 	// This tile is used for various tile types
 	// use as bitmask. Assumption that will not have more than 16 tile types.
 	Types uint16
 
 	// This tile and all children/grandchildren/second cousins once removed etc... are present.
-	Full bool
+	// Full is tiletype specific.
+	full map[TileType]bool
+}
 
-	// Misc data that is associated with the tile.
-	// This could be anything that the caller/client wants it to be.
-	// This data is TileType specific.
-	Data map[TileType]interface{}
+// Tile is a node within a quadtree.
+// Should shuffle these around for byte padding.... but not yet.
+// Although a Tile instance will only be in the quadmap once (for a given quadkey) it may
+// be the case that the same tile+quadkey is used by multiple "groups" and also for
+// multiple tiletypes within a group.
+//
+// For example, if we populate the quadmap with one set of data (called group1) and group1
+// in turn has information about tiletype1 and tiletype2, this means that we'll need to track at a per quadkey
+// level if the files are full (and for which tiletypes).
+// Once the caller then populates with a completely different group, then we'll need to store that information
+// as well (in the same tile). This means that we'll need to store a map of groupID -> GroupDetails.
+//
+// We *could* skip all this if we wanted a separate quadmap per group, but given we need to search all groups
+// at once, this would be incredibly inefficient
+type Tile struct {
+	// stupid to keep it in here?
+	// Will also store the zoom level in the key.
+	QuadKey uint64
+
+	// groupIDs that have information for this tile. The IDs listed here can be used elsewhere to look up data.
+	// Not convinced that the groupdata *has* to be stored actually IN the tree. TODO(kpfaulkner) investigate
+	// if data should be in tree or just IDs?
+	groupIDs map[string]*GroupDetails
 }
 
 // NewTile creates a new tile at slippy co-ords x,y,z
@@ -38,32 +56,34 @@ func NewTile(x int32, y int32, z byte) *Tile {
 	return t
 }
 
-func (t *Tile) SetTileType(tt TileType) {
-	t.Types |= 1 << uint(tt)
+func (t *Tile) SetTileType(groupID string, tt TileType) {
+	t.groupIDs[groupID].Types |= 1 << uint(tt)
 }
 
-func (t *Tile) HasTileType(tt TileType) bool {
-	return t.Types&(1<<uint(tt)) != 0
+func (t *Tile) HasTileType(groupID string, tt TileType) bool {
+	return t.groupIDs[groupID].Types&(1<<uint(tt)) != 0
 }
 
 func (t *Tile) GetTileZoomLevel() byte {
 	return GetTileZoomLevel(t.QuadKey)
 }
 
-// SetDataForTileType sets the data for a given tile type.
-// Only creates Data map at this stage (saves us creating a potential mass of unused maps)
-func (t *Tile) SetDataForTileType(tileType TileType, data interface{}) error {
-	if t.Data == nil {
-		t.Data = make(map[TileType]interface{})
+// SetFullForTileType sets the full flag for a given tile type.
+// Only creates Full map at this stage (saves us creating a potential mass of unused maps)
+func (t *Tile) SetFullForTileType(groupID string, tileType TileType, full bool) error {
+	if t.groupIDs[groupID].full == nil {
+		t.groupIDs[groupID].full = make(map[TileType]bool)
 	}
 
-	t.Data[tileType] = data
+	t.groupIDs[groupID].full[tileType] = full
 	return nil
 }
 
-func (t *Tile) GetDataForTileType(tileType TileType) (interface{}, error) {
-	if data, ok := t.Data[tileType]; ok {
-		return data, nil
+// GetFullForTileType gets the full flag for a given tile type. Defaults to false if no flag found
+func (t *Tile) GetFullForTileType(groupID string, tileType TileType) bool {
+	if full, ok := t.groupIDs[groupID].full[tileType]; ok {
+		return full
 	}
-	return nil, fmt.Errorf("no data for tile type %d", tileType)
+
+	return false
 }

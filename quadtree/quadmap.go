@@ -5,11 +5,22 @@ import (
 	"fmt"
 )
 
+// TileDetails information about a tile, groups its associated with,
+// tiletypes etc etc.
+type TileDetails struct {
+	QuadKey  uint64
+	GroupIDs map[string]GroupDetails
+}
+
 // QuadMap is a quadtree in disguise...
 type QuadMap struct {
 
 	// map of quadkey to tile
 	quadKeyMap map[uint64]*Tile
+
+	// Slice of all groups stored in the Quadmap.
+	// Used for when wanting to know if we've processed all groups later on.
+	groupIDs []string
 }
 
 func NewQuadMap() *QuadMap {
@@ -80,22 +91,6 @@ func (qm *QuadMap) GetTileForSlippy(x int32, y int32, z byte) (*Tile, bool, erro
 	return ancestorTile, false, nil
 }
 
-// GetExactTileForSlippy returns tile for slippy co-ord match. Does NOT traverse up the ancestry
-func (qm *QuadMap) GetExactTileForSlippy(x int32, y int32, z byte) (*Tile, error) {
-	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
-	return qm.GetExactTileForQuadKey(quadKey)
-}
-
-// GetExactTileForQuadKey returns tile for quadkey match. Does NOT traverse up the ancestry
-func (qm *QuadMap) GetExactTileForQuadKey(quadKey uint64) (*Tile, error) {
-
-	// if actual quadkey exists, return tile.
-	if t, ok := qm.quadKeyMap[quadKey]; ok {
-		return t, nil
-	}
-	return nil, errors.New("no tile found")
-}
-
 // traverseForTileOrParent returns tile for quadkey OR parent tile if quadkey does not exist
 // AND the parent has the full flag set. Otherwise returns not found error
 func (qm *QuadMap) traverseForTileOrFullParent(quadKey uint64) (*Tile, error) {
@@ -119,6 +114,22 @@ func (qm *QuadMap) traverseForTileOrFullParent(quadKey uint64) (*Tile, error) {
 	}
 
 	return qm.traverseForTileOrFullParent(parentKey)
+}
+
+// GetExactTileForSlippy returns tile for slippy co-ord match. Does NOT traverse up the ancestry
+func (qm *QuadMap) GetExactTileForSlippy(x int32, y int32, z byte) (*Tile, error) {
+	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
+	return qm.GetExactTileForQuadKey(quadKey)
+}
+
+// GetExactTileForQuadKey returns tile for quadkey match. Does NOT traverse up the ancestry
+func (qm *QuadMap) GetExactTileForQuadKey(quadKey uint64) (*Tile, error) {
+
+	// if actual quadkey exists, return tile.
+	if t, ok := qm.quadKeyMap[quadKey]; ok {
+		return t, nil
+	}
+	return nil, errors.New("no tile found")
 }
 
 // NumberOfTilesForLevel returns number of tiles for a given zoom level.
@@ -161,6 +172,111 @@ func createChildForPos(t *Tile, pos int) (*Tile, error) {
 	if err != nil {
 		return nil, err
 	}
-	child := &Tile{QuadKey: quadKey, Types: t.Types, Full: t.Full}
+	child := &Tile{QuadKey: quadKey}
 	return child, nil
+}
+
+// HaveTileForSlippyTileTypeAndGroupID returns bool indicating if we have details for a tile at the provided
+// slippy co-ords but also matching the tiletype and groupID.
+func (qm *QuadMap) HaveTileForSlippyTileTypeAndGroupID(x int32, y int32, z byte, tileType TileType, groupID string) (bool, error) {
+	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
+	return qm.HaveTileForTypeAndGroupID(quadKey, tileType, groupID)
+}
+
+// HaveTileForTypeAndGroupID returns bool indicating if we have details for a tile at the provided
+// quadKey provided but also matching the tiletype and groupID.
+// It will either return the tile requested OR an ancestor that is full
+// The process is:
+//
+//   - if quadkey exists, groupID exists and tiletype exists, return true
+//
+//   - else
+//
+//   - get parent quadkey
+//
+//   - if parent quadkey exists and is full, return parent details
+//
+//   - loop until no parent.
+//
+//     What happens if we hit a parent that is NOT full? No tile therefore return error?
+//     Returns tile (actual or parent), bool indicating if actual (true == actual, false == ancestor) and error
+func (qm *QuadMap) HaveTileForTypeAndGroupID(quadKey uint64, tileType TileType, groupID string) (bool, error) {
+
+	// if actual quadkey exists, check tiletype and groupID
+	if t, ok := qm.quadKeyMap[quadKey]; ok {
+		if g, ok := t.groupIDs[groupID]; ok {
+			if g.Types&uint16(tileType) != 0 {
+				return true, nil
+			}
+		}
+	}
+
+	parentQuadKey, err := GetParentQuadKey(quadKey)
+	if err != nil {
+		return false, err
+	}
+
+	// check parents and upwards
+	found, err := qm.HaveTileForTypeAndGroupID(parentQuadKey, tileType, groupID)
+	if err != nil {
+		return false, err
+	}
+
+	// return whether found or not
+	return found, nil
+}
+
+// GetTileDetailsForSlippyCoords returns details for the tile at slippy coord x,y,z.
+// This may involve multiple groups (ie multiple data sets loaded into single quadmap) but
+// also different tiletypes as well.
+func (qm *QuadMap) GetTileDetailsForSlippyCoords(x int32, y int32, z byte, tileDetails *TileDetails) error {
+	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
+	return qm.GetTileDetailsForQuadkey(quadKey, tileDetails, true)
+}
+
+// GetTileDetailsForQuadkey returns details for the tile for quadkey
+// This may involve multiple groups (ie multiple data sets loaded into single quadmap) but
+// also different tiletypes as well.
+func (qm *QuadMap) GetTileDetailsForQuadkey(quadKey uint64, tileDetails *TileDetails, isTargetLevel bool) error {
+
+	// high as we can go... cant do any more, so return nil
+	if quadKey == 0 {
+		return nil
+	}
+
+	if t, ok := qm.quadKeyMap[quadKey]; ok {
+
+		// whatever groups are in tile t....  add the details to tileDetails but only if full (if we're processing parent)
+		for k, v := range t.groupIDs {
+
+			// get group details.
+			group := tileDetails.GroupIDs[k]
+
+			shouldStore := false
+
+			// check full. Only proceed if either isTargetLevel is true OR tile is full
+			for tt, full := range v.full {
+				if isTargetLevel || full {
+					shouldStore = shouldStore || true
+				}
+				group.full[tt] = group.full[tt] || (isTargetLevel || full)
+			}
+
+			// store only if we're either the actual level we want... OR we've had a full group/tiletype combination.
+			if shouldStore {
+				group.Types |= v.Types
+				tileDetails.GroupIDs[k] = group
+			}
+		}
+	}
+
+	parentQuadKey, err := GetParentQuadKey(quadKey)
+	if err != nil {
+
+		// cant go any higher... stop the iteration.
+		return nil
+	}
+
+	// isTargetLevel false due to we're processing an ancestor now.
+	return qm.GetTileDetailsForQuadkey(parentQuadKey, tileDetails, false)
 }
