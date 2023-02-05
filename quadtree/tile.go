@@ -53,6 +53,7 @@ func NewTile(x int32, y int32, z byte) *Tile {
 	t := &Tile{}
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
 	t.QuadKey = quadKey
+	t.groupIDs = make(map[string]*GroupDetails)
 	return t
 }
 
