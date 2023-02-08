@@ -5,11 +5,17 @@ import (
 	"fmt"
 )
 
+// TileDetailsGroup is same as TileDetails but we also want
+// the quadkey that gave us the match.
+type TileDetailsGroup struct {
+	GroupDetails
+	QuadKey uint64
+}
+
 // TileDetails information about a tile, groups its associated with,
 // tiletypes etc etc.
 type TileDetails struct {
-	QuadKey  uint64
-	GroupIDs map[string]GroupDetails
+	Groups []TileDetailsGroup
 }
 
 // QuadMap is a quadtree in disguise...
@@ -88,6 +94,10 @@ func (qm *QuadMap) NumberOfTilesForLevel(level byte) int {
 	return count
 }
 
+func (qm *QuadMap) NumberOfTiles() int {
+	return len(qm.quadKeyMap)
+}
+
 // AddTile adds a pre-generated tile (which has its quadkey already)
 func (qm *QuadMap) AddTile(t *Tile) error {
 	qm.quadKeyMap[t.QuadKey] = t
@@ -96,15 +106,12 @@ func (qm *QuadMap) AddTile(t *Tile) error {
 
 // AddChild adds a child to tile t, in position pos.
 // Returns created (and registered in quadmap) child tile
-func (qm *QuadMap) AddChild(t *Tile, pos int, groupID string, tileType TileType) (*Tile, error) {
+func (qm *QuadMap) AddChild(t *Tile, pos int, groupID uint32, tileType TileType) (*Tile, error) {
 	quadKey, err := GetChildQuadKeyForPos(t.QuadKey, pos)
 	if err != nil {
 		return nil, err
 	}
 
-	if quadKey == 14987979559889010690 {
-		fmt.Printf("boom\n")
-	}
 	// check if child exists.
 	if child, ok := qm.quadKeyMap[quadKey]; ok {
 		child.SetTileType(groupID, tileType)
@@ -128,13 +135,12 @@ func createChildForPos(t *Tile, pos int) (*Tile, error) {
 		return nil, err
 	}
 	child := &Tile{QuadKey: quadKey}
-	child.groupIDs = make(map[string]*GroupDetails)
 	return child, nil
 }
 
 // HaveTileForSlippyTileTypeAndGroupID returns bool indicating if we have details for a tile at the provided
 // slippy co-ords but also matching the tiletype and groupID.
-func (qm *QuadMap) HaveTileForSlippyTileTypeAndGroupID(x int32, y int32, z byte, tileType TileType, groupID string) (bool, error) {
+func (qm *QuadMap) HaveTileForSlippyTileTypeAndGroupID(x int32, y int32, z byte, tileType TileType, groupID uint32) (bool, error) {
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
 	return qm.HaveTileForTypeAndGroupID(quadKey, tileType, groupID, true)
 }
@@ -156,13 +162,13 @@ func (qm *QuadMap) HaveTileForSlippyTileTypeAndGroupID(x int32, y int32, z byte,
 //
 //     What happens if we hit a parent that is NOT full? No tile therefore return error?
 //     Returns tile (actual or parent), bool indicating if actual (true == actual, false == ancestor) and error
-func (qm *QuadMap) HaveTileForTypeAndGroupID(quadKey uint64, tileType TileType, groupID string, actualTile bool) (bool, error) {
+func (qm *QuadMap) HaveTileForTypeAndGroupID(quadKey uint64, tileType TileType, groupID uint32, actualTile bool) (bool, error) {
 
 	// if actual quadkey exists, check tiletype and groupID
 	if t, ok := qm.quadKeyMap[quadKey]; ok {
-		if g, ok := t.groupIDs[groupID]; ok {
-			if g.Types&uint16(tileType) != 0 {
-				if g.full[tileType] || actualTile {
+		for _, g := range t.groups {
+			if g.GroupID == groupID && g.Type == tileType {
+				if g.Full || actualTile {
 					return true, nil
 				}
 			}
@@ -205,33 +211,11 @@ func (qm *QuadMap) GetTileDetailsForQuadkey(quadKey uint64, tileDetails *TileDet
 	if t, ok := qm.quadKeyMap[quadKey]; ok {
 
 		// whatever groups are in tile t....  add the details to tileDetails but only if full (if we're processing parent)
-		for k, v := range t.groupIDs {
+		for _, g := range t.groups {
 
-			// get group details.
-			group := tileDetails.GroupIDs[k]
-			if group.full == nil {
-				group.full = make(map[TileType]bool)
-			}
-
-			shouldStore := false
-
-			// check full. Only proceed if either isTargetLevel is true OR tile is full
-			for tt, full := range v.full {
-				if isTargetLevel || full {
-					shouldStore = shouldStore || true
-				}
-				group.full[tt] = group.full[tt] || (isTargetLevel || full)
-			}
-
-			// store only if we're either the actual level we want... OR we've had a full group/tiletype combination.
-			if shouldStore {
-				group.Types |= v.Types
-				if tileDetails.GroupIDs == nil {
-					tileDetails.GroupIDs = make(map[string]GroupDetails)
-				}
-				group.GroupID = k
-				tileDetails.GroupIDs[k] = group
-				tileDetails.QuadKey = quadKey
+			// correct target level... so store all the tiles at this level... no?
+			if isTargetLevel || g.Full {
+				tileDetails.Groups = append(tileDetails.Groups, TileDetailsGroup{GroupDetails: GroupDetails{Full: g.Full, Type: g.Type, GroupID: g.GroupID}, QuadKey: quadKey})
 			}
 		}
 	}
