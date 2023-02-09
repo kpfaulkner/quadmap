@@ -1,5 +1,9 @@
 package quadtree
 
+import (
+	"fmt"
+)
+
 type TileType uint16
 
 const (
@@ -89,6 +93,15 @@ func (t *Tile) GetTileZoomLevel() byte {
 // SetFullForTileType sets the full flag for a given tile type.
 // Only creates Full map at this stage (saves us creating a potential mass of unused maps)
 func (t *Tile) SetFullForTileType(groupID uint32, tileType TileType, full bool) error {
+
+	// loop through groups... see if already have groupid + type match.
+	for i,g := range t.groups {
+		if g.GroupID == groupID && g.Type == tileType {
+			g.Full = full
+			t.groups[i] = g
+			return nil
+		}
+	}
 
 	g := GroupDetails{
 		GroupID: groupID,

@@ -31,7 +31,7 @@ type QuadMap struct {
 
 func NewQuadMap() *QuadMap {
 	return &QuadMap{
-		quadKeyMap: make(map[uint64]*Tile),
+		quadKeyMap: make(map[uint64]*Tile,100000000),
 	}
 }
 
@@ -118,7 +118,7 @@ func (qm *QuadMap) AddChild(t *Tile, pos int, groupID uint32, tileType TileType)
 		return child, nil
 	}
 
-	child, err := createChildForPos(t, pos)
+	child, err := createChildForPos(quadKey, pos)
 	if err != nil {
 		return nil, err
 	}
@@ -129,12 +129,8 @@ func (qm *QuadMap) AddChild(t *Tile, pos int, groupID uint32, tileType TileType)
 
 // createChildForPos creates child tile for tile t in appropriate position
 // Populates tile type and full flags based off parent.
-func createChildForPos(t *Tile, pos int) (*Tile, error) {
-	quadKey, err := GetChildQuadKeyForPos(t.QuadKey, pos)
-	if err != nil {
-		return nil, err
-	}
-	child := &Tile{QuadKey: quadKey}
+func createChildForPos(childQuadKey uint64, pos int) (*Tile, error) {
+	child := &Tile{QuadKey: childQuadKey}
 	return child, nil
 }
 
@@ -227,6 +223,9 @@ func (qm *QuadMap) GetTileDetailsForQuadkey(quadKey uint64, tileDetails *TileDet
 		return nil
 	}
 
+	if parentQuadKey == 15240181139021758469 {
+		fmt.Printf("snoop\n")
+	}
 	// isTargetLevel false due to we're processing an ancestor now.
 	return qm.GetTileDetailsForQuadkey(parentQuadKey, tileDetails, false)
 }
