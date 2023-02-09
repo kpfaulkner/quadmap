@@ -223,9 +223,6 @@ func (qm *QuadMap) GetTileDetailsForQuadkey(quadKey uint64, tileDetails *TileDet
 		return nil
 	}
 
-	if parentQuadKey == 15240181139021758469 {
-		fmt.Printf("snoop\n")
-	}
 	// isTargetLevel false due to we're processing an ancestor now.
 	return qm.GetTileDetailsForQuadkey(parentQuadKey, tileDetails, false)
 }
