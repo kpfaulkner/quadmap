@@ -3,10 +3,14 @@ package quadtree
 type TileType uint16
 
 const (
-	// only use vert for now
-	TileTypeVert  TileType = 0b00000000000000001
-	TileTypeEast  TileType = 0b00000000000000010
-	TileTypeNorth TileType = 0b00000000000000100
+	TileTypeNone      TileType = 0b00000000000000000
+	TileTypeVert      TileType = 0b00000000000000001
+	TileTypeEast      TileType = 0b00000000000000010
+	TileTypeNorth     TileType = 0b00000000000000100
+	TileTypeSouth     TileType = 0b00000000000001000
+	TileTypeWest     TileType = 0b00000000000010000
+	TileTypeDsm      TileType = 0b00000000000100000
+	TileTypeTrueOrthoTileType = 0b00000000001000000
 )
 
 // TODO(kpfaulkner) change this to be a uint64...  we should be able to encode
