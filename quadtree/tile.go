@@ -1,9 +1,5 @@
 package quadtree
 
-import (
-	"fmt"
-)
-
 type TileType uint16
 
 const (
