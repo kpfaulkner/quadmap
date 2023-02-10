@@ -28,6 +28,10 @@ type GroupDetails struct {
 	// This tile and all children/grandchildren/second cousins once removed etc... are present.
 	// Full is tiletype specific.
 	Full bool
+
+	X uint32
+	Y uint32
+	Z byte
 }
 
 // Tile is a node within a quadtree.
@@ -57,7 +61,7 @@ type Tile struct {
 
 // NewTile creates a new tile at slippy co-ords x,y,z
 // Probably should only be used for root tile. FIXME(kpfaulkner) confirm?
-func NewTile(x int32, y int32, z byte) *Tile {
+func NewTile(x uint32, y uint32, z byte) *Tile {
 	t := &Tile{}
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
 	t.QuadKey = quadKey

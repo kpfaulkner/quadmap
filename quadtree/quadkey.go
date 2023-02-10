@@ -58,10 +58,10 @@ func GetChildrenQuadKeys(quadKey uint64) []uint64 {
 	return quadKeys
 }
 
-func GenerateQuadKeyIndexFromSlippy(x int32, y int32, zoomLevel byte) uint64 {
+func GenerateQuadKeyIndexFromSlippy(x uint32, y uint32, zoomLevel byte) uint64 {
 	var binaryQuadkey uint64
 	for i := zoomLevel; i > 0; i-- {
-		var mask int32 = 1 << (i - 1)
+		var mask uint32 = 1 << (i - 1)
 		var bitLocation uint64 = 64 - (uint64(zoomLevel-i+1) * 2) + 1
 		if x&mask != 0 {
 			binaryQuadkey |= uint64(0b1) << (bitLocation - 1)

@@ -63,7 +63,7 @@ func (qm *QuadMap) GetChildInPos(t *Tile, pos int) (*Tile, error) {
 }
 
 // GetExactTileForSlippy returns tile for slippy co-ord match. Does NOT traverse up the ancestry
-func (qm *QuadMap) GetExactTileForSlippy(x int32, y int32, z byte) (*Tile, error) {
+func (qm *QuadMap) GetExactTileForSlippy(x uint32, y uint32, z byte) (*Tile, error) {
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
 	return qm.GetExactTileForQuadKey(quadKey)
 }
@@ -94,6 +94,21 @@ func (qm *QuadMap) NumberOfTilesForLevel(level byte) int {
 	return count
 }
 
+func (qm *QuadMap) GetTilesForTypeAndLevel(tt TileType, level byte) []*Tile {
+	tiles := []*Tile{}
+
+	for _, t := range qm.quadKeyMap {
+		if  GetTileZoomLevel(t.QuadKey) == level {
+			for _,g := range t.groups {
+				if g.Type == tt {
+					tiles = append(tiles, t)
+				}
+			}
+		}
+	}
+	return tiles
+}
+
 func (qm *QuadMap) NumberOfTiles() int {
 	return len(qm.quadKeyMap)
 }
@@ -106,11 +121,14 @@ func (qm *QuadMap) AddTile(t *Tile) error {
 
 // AddChild adds a child to tile t, in position pos.
 // Returns created (and registered in quadmap) child tile
-func (qm *QuadMap) AddChild(t *Tile, pos int, groupID uint32, tileType TileType) (*Tile, error) {
-	quadKey, err := GetChildQuadKeyForPos(t.QuadKey, pos)
-	if err != nil {
-		return nil, err
-	}
+func (qm *QuadMap) AddChild(t *Tile,x uint32, y uint32, z uint32, pos int, groupID uint32, tileType TileType) (*Tile, error) {
+
+	// x,y,z are already child coords...  so no need to take pos into account
+	quadKey := GenerateQuadKeyIndexFromSlippy(x,y,byte(z))
+	//quadKey, err := GetChildQuadKeyForPos(xyzQuadKey, pos)
+	//if err != nil {
+	//	return nil, err
+	//}
 
 	// check if child exists.
 	if child, ok := qm.quadKeyMap[quadKey]; ok {
@@ -118,10 +136,12 @@ func (qm *QuadMap) AddChild(t *Tile, pos int, groupID uint32, tileType TileType)
 		return child, nil
 	}
 
+	child := &Tile{QuadKey: quadKey}
+	/*
 	child, err := createChildForPos(quadKey, pos)
 	if err != nil {
 		return nil, err
-	}
+	} */
 	child.SetTileType(groupID, tileType)
 	qm.quadKeyMap[child.QuadKey] = child
 	return child, nil
@@ -136,7 +156,7 @@ func createChildForPos(childQuadKey uint64, pos int) (*Tile, error) {
 
 // HaveTileForSlippyTileTypeAndGroupID returns bool indicating if we have details for a tile at the provided
 // slippy co-ords but also matching the tiletype and groupID.
-func (qm *QuadMap) HaveTileForSlippyTileTypeAndGroupID(x int32, y int32, z byte, tileType TileType, groupID uint32) (bool, error) {
+func (qm *QuadMap) HaveTileForSlippyTileTypeAndGroupID(x uint32, y uint32, z byte, tileType TileType, groupID uint32) (bool, error) {
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
 	return qm.HaveTileForTypeAndGroupID(quadKey, tileType, groupID, true)
 }
@@ -189,7 +209,7 @@ func (qm *QuadMap) HaveTileForTypeAndGroupID(quadKey uint64, tileType TileType, 
 // GetTileDetailsForSlippyCoords returns details for the tile at slippy coord x,y,z.
 // This may involve multiple groups (ie multiple data sets loaded into single quadmap) but
 // also different tiletypes as well.
-func (qm *QuadMap) GetTileDetailsForSlippyCoords(x int32, y int32, z byte, tileDetails *TileDetails) error {
+func (qm *QuadMap) GetTileDetailsForSlippyCoords(x uint32, y uint32, z byte, tileDetails *TileDetails) error {
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
 	return qm.GetTileDetailsForQuadkey(quadKey, tileDetails, true)
 }
