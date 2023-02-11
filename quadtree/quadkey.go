@@ -15,11 +15,12 @@ func GetParentQuadKey(quadKey uint64) (uint64, error) {
 		return 0, errors.New("no parent")
 	}
 
-	shift := 63 - (parentZoomLevel * 2)
-	quadKey = quadKey >> shift
-	quadKey = quadKey << shift
-	quadKey |= uint64(parentZoomLevel)
-	return quadKey, nil
+	shift := 64 - (parentZoomLevel * 2)
+	parentQuadKey := quadKey >> shift
+	parentQuadKey = parentQuadKey << shift
+	parentQuadKey |= uint64(parentZoomLevel)
+
+	return parentQuadKey, nil
 }
 
 // GetChildQuadKeyForPos where pos is 0-3

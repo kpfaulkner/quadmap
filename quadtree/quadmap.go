@@ -3,6 +3,7 @@ package quadtree
 import (
 	"errors"
 	"fmt"
+	"strconv"
 )
 
 // TileDetailsGroup is same as TileDetails but we also want
@@ -125,10 +126,6 @@ func (qm *QuadMap) AddChild(t *Tile,x uint32, y uint32, z uint32, pos int, group
 
 	// x,y,z are already child coords...  so no need to take pos into account
 	quadKey := GenerateQuadKeyIndexFromSlippy(x,y,byte(z))
-	//quadKey, err := GetChildQuadKeyForPos(xyzQuadKey, pos)
-	//if err != nil {
-	//	return nil, err
-	//}
 
 	// check if child exists.
 	if child, ok := qm.quadKeyMap[quadKey]; ok {
@@ -238,7 +235,6 @@ func (qm *QuadMap) GetTileDetailsForQuadkey(quadKey uint64, tileDetails *TileDet
 
 	parentQuadKey, err := GetParentQuadKey(quadKey)
 	if err != nil {
-
 		// cant go any higher... stop the iteration.
 		return nil
 	}
