@@ -1,25 +1,20 @@
 package quadtree
 
+import "fmt"
+
+// TileType is the type of a given tile
+// Given we'll have very few tile types we could just use a byte, but
+// may eventually use this as a bitmask to help filtering. So will
+// keep it as a uint16 for now. Can change later if space becomes an issue
 type TileType uint16
 
-const (
-	TileTypeNone       TileType = 0b00000000000000000
-	TileTypeVert       TileType = 0b00000000000000001
-	TileTypeEast       TileType = 0b00000000000000010
-	TileTypeNorth      TileType = 0b00000000000000100
-	TileTypeSouth      TileType = 0b00000000000001000
-	TileTypeWest      TileType = 0b00000000000010000
-	TileTypeDsm       TileType = 0b00000000000100000
-	TileTypeTrueOrtho TileType = 0b00000000001000000
-	TileTypeDem      TileType = 0b00000000010000000
-)
-
-// TODO(kpfaulkner) change this to be a uint64...  we should be able to encode
-// groupid, type and full into a single uint64
+// GroupDetails has bare information about the "group" that created the tile this is associated with.
+// GroupID is the ID of the data feed (simply has to be unique)
+// Type is the tiletype assocated with this group.
+// Full determines if this tile+groupID+type is "full"... if true then
+// all child tiles are also full/exist.
+// TODO(kpfaulkner) investigate if this can simply be changed to a uint64.
 type GroupDetails struct {
-
-	// GroupID... probably not required since it should be used as a map key to access this.
-	// TODO(kpfaulkner) confirm if this is required.
 	GroupID uint32
 
 	// This tile is used for various tile types
@@ -29,14 +24,9 @@ type GroupDetails struct {
 	// This tile and all children/grandchildren/second cousins once removed etc... are present.
 	// Full is tiletype specific.
 	Full bool
-
-	X uint32
-	Y uint32
-	Z byte
 }
 
 // Tile is a node within a quadtree.
-// Should shuffle these around for byte padding.... but not yet.
 // Although a Tile instance will only be in the quadmap once (for a given quadkey) it may
 // be the case that the same tile+quadkey is used by multiple "groups" and also for
 // multiple tiletypes within a group.
@@ -55,13 +45,12 @@ type Tile struct {
 	QuadKey uint64
 
 	// groups that have information for this tile. The IDs listed here can be used elsewhere to look up data.
-	// Not convinced that the groupdata *has* to be stored actually IN the tree. TODO(kpfaulkner) investigate
-	// if data should be in tree or just IDs?
+	// Not convinced that the groupdata *has* to be stored actually IN the tree.
 	groups []GroupDetails
 }
 
 // NewTile creates a new tile at slippy co-ords x,y,z
-// Probably should only be used for root tile. FIXME(kpfaulkner) confirm?
+// Will probably only be used for root tile
 func NewTile(x uint32, y uint32, z byte) *Tile {
 	t := &Tile{}
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
@@ -70,13 +59,20 @@ func NewTile(x uint32, y uint32, z byte) *Tile {
 }
 
 // SetTileType for a given groupID and tiletype.
-func (t *Tile) SetTileType(groupID uint32, tt TileType) {
+// Checks if groupID + tiletype combination already exists. Returns error if so.
+func (t *Tile) SetTileType(groupID uint32, tt TileType) error {
+
+	if t.HasTileType(groupID, tt) {
+		return fmt.Errorf("GroupID + TileType combination already exists")
+	}
+
 	g := GroupDetails{
 		GroupID: groupID,
 		Type:    tt,
 	}
 
 	t.groups = append(t.groups, g)
+	return nil
 }
 
 // HasTileType... needs to loop through array. Hopefully wouldn't be too many
@@ -91,16 +87,17 @@ func (t *Tile) HasTileType(groupID uint32, tt TileType) bool {
 	return false
 }
 
+// GetTileZoomLevel returns zoom level of tile
 func (t *Tile) GetTileZoomLevel() byte {
 	return GetTileZoomLevel(t.QuadKey)
 }
 
-// SetFullForTileType sets the full flag for a given tile type.
+// SetFullForGroupIDAndTileType sets the full flag for a given tile type.
 // Only creates Full map at this stage (saves us creating a potential mass of unused maps)
-func (t *Tile) SetFullForTileType(groupID uint32, tileType TileType, full bool) error {
+func (t *Tile) SetFullForGroupIDAndTileType(groupID uint32, tileType TileType, full bool) error {
 
 	// loop through groups... see if already have groupid + type match.
-	for i,g := range t.groups {
+	for i, g := range t.groups {
 		if g.GroupID == groupID && g.Type == tileType {
 			g.Full = full
 			t.groups[i] = g
@@ -118,8 +115,8 @@ func (t *Tile) SetFullForTileType(groupID uint32, tileType TileType, full bool) 
 	return nil
 }
 
-// GetFullForTileType gets the full flag for a given tile type. Defaults to false if no flag found
-func (t *Tile) GetFullForTileType(groupID uint32, tileType TileType) bool {
+// GetFullForGroupIDAndTileType gets the full flag for a given tile type. Defaults to false if no flag found
+func (t *Tile) GetFullForGroupIDAndTileType(groupID uint32, tileType TileType) bool {
 
 	// BAD BAD BAD, need to loop through on a tile to find if its full or not.
 	// BUT... not expecting that many overlaps for a single tile.

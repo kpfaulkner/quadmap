@@ -7,6 +7,7 @@ import (
 
 // Misc functions for generating/calculating quadkeys
 
+// GetParentQuadKey get parents quadkey for passed quadkey
 func GetParentQuadKey(quadKey uint64) (uint64, error) {
 	zoomLevel := quadKey & 0xFF
 	parentZoomLevel := zoomLevel - 1
@@ -50,6 +51,7 @@ func GetChildQuadKeyForPos(quadKey uint64, pos int) (uint64, error) {
 	return quadKey, nil
 }
 
+// GetChildrenQuadKeys get all the quadkeys for the 4 children of the passed quadkey
 func GetChildrenQuadKeys(quadKey uint64) []uint64 {
 	var quadKeys []uint64
 	for i := 0; i < 4; i++ {
@@ -59,6 +61,7 @@ func GetChildrenQuadKeys(quadKey uint64) []uint64 {
 	return quadKeys
 }
 
+// GenerateQuadKeyIndexFromSlippy generates the quadkey index from slippy coords
 func GenerateQuadKeyIndexFromSlippy(x uint32, y uint32, zoomLevel byte) uint64 {
 	var binaryQuadkey uint64
 	for i := zoomLevel; i > 0; i-- {
@@ -75,6 +78,7 @@ func GenerateQuadKeyIndexFromSlippy(x uint32, y uint32, zoomLevel byte) uint64 {
 	return binaryQuadkey
 }
 
+// GenerateSlippyCoordsFromQuadKeyIndex generates the slippy coords from quadkey index
 func GenerateSlippyCoordsFromQuadKey(quadKey uint64) (int32, int32, byte) {
 	var x int32
 	var y int32
@@ -107,6 +111,7 @@ func GenerateSlippyCoordsFromQuadKey(quadKey uint64) (int32, int32, byte) {
 	return x, y, zoomLevel
 }
 
+// GetTileZoomLevel get the zoom level of the quadkey
 func GetTileZoomLevel(quadKey uint64) byte {
 	zoomLevel := byte(quadKey & 0xFF)
 	return zoomLevel
