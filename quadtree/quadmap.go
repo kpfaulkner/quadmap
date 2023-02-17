@@ -3,6 +3,7 @@ package quadtree
 import (
 	"errors"
 	"fmt"
+	"math"
 )
 
 // TileDetailsGroup is same as TileDetails but we also want
@@ -241,4 +242,42 @@ func (qm *QuadMap) GetTileDetailsForQuadkey(quadKey uint64, tileDetails *TileDet
 
 	// isTargetLevel false due to we're processing an ancestor now.
 	return qm.GetTileDetailsForQuadkey(parentQuadKey, tileDetails, false)
+}
+
+// GetBoundsForZoom returns the minx,miny,maxx,maxy slippy coords for a given zoom level
+// extracted from the quadmap. Brute forcing it for now.
+func (qm *QuadMap) GetBoundsForZoom(zoom byte) (int32, int32, int32, int32, error) {
+
+	var minX int32 = math.MaxInt32
+	var minY int32 = math.MaxInt32
+	var maxX int32 = 0
+	var maxY int32 = 0
+
+	for quadKey, _ := range qm.quadKeyMap {
+		z := GetTileZoomLevel(quadKey)
+
+		if z > zoom {
+			// skip it...
+			continue
+		}
+
+		if z < zoom {
+			//
+		}
+		x, y, _ := GenerateSlippyCoordsFromQuadKey(quadKey)
+		if x < minX {
+			minX = x
+		}
+		if x > maxX {
+			maxX = x
+		}
+		if y < minY {
+			minY = y
+		}
+		if y > maxY {
+			maxY = y
+		}
+	}
+
+	return minX, minY, maxX, maxY, nil
 }
