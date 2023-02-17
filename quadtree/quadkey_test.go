@@ -1,6 +1,7 @@
 package quadtree
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -18,10 +19,10 @@ const (
 	Child3 QuadKey = 0b1101110110111100000000000000000000000000000000000000000000000111
 
 	// MinChild (top left) of QuadKey (above) at level 21
-	MinChildZoom21 uint64 = 0b1101110110110000000000000000000000000000000000000000000000010101
+	MinChildZoom21 QuadKey = 0b1101110110110000000000000000000000000000000000000000000000010101
 
 	// MaxChild (bottom right) of QuadKey (above) at level 21
-	MaxChildZoom21 uint64 = 0b1101110110111111111111111111111111111111110000000000000000010101
+	MaxChildZoom21 QuadKey = 0b1101110110111111111111111111111111111111110000000000000000010101
 
 	// Parent is same as Quadkey but bits 10-11 are zeroed and length (at end of binary) now reads 5
 	parent QuadKey = 0b1101110110000000000000000000000000000000000000000000000000000101
@@ -74,14 +75,42 @@ func TestGetChildQuadKeyForPos(t *testing.T) {
 // based off an original quadkey and zoom target
 func TestGenerateMinMaxQuadKeysForZoom(t *testing.T) {
 
-	minChild, maxChild, err := GenerateMinMaxQuadKeysForZoom(QuadKey, 7)
+	minChild, maxChild, err := GenerateMinMaxQuadKeysForZoom(quadKey, 7)
 	assert.NoErrorf(t, err, "no error expected")
 	assert.Equal(t, Child0, minChild, "min child incorrect")
 	assert.Equal(t, Child3, maxChild, "max child incorrect")
 
-	minChild, maxChild, err = GenerateMinMaxQuadKeysForZoom(QuadKey, 21)
+	minChild, maxChild, err = GenerateMinMaxQuadKeysForZoom(quadKey, 21)
 	assert.NoErrorf(t, err, "no error expected")
 	assert.Equal(t, MinChildZoom21, minChild, "min child incorrect")
 	assert.Equal(t, MaxChildZoom21, maxChild, "max child incorrect")
 
+}
+
+func TestEnv(t *testing.T) {
+	for _, tc := range []struct {
+		qk             QuadKey
+		minLon, minLat float64
+		maxLon, maxLat float64
+	}{
+		{
+			qk:     GenerateQuadKeyIndexFromSlippy(60292, 39326, 16),
+			minLon: 151.19384765625,
+			minLat: -33.86585445407186,
+			maxLon: 151.1993408203125,
+			maxLat: -33.861293113515515,
+		},
+	} {
+		// TODO: QuadKey.String()
+		t.Run(fmt.Sprint(tc.qk), func(t *testing.T) {
+			env, err := tc.qk.Envelope()
+			assert.NoError(t, err)
+			min, max, ok := env.MinMaxXYs()
+			assert.True(t, ok)
+			assert.InDelta(t, tc.minLon, min.X, 1e-9)
+			assert.InDelta(t, tc.minLat, min.Y, 1e-9)
+			assert.InDelta(t, tc.maxLon, max.X, 1e-9)
+			assert.InDelta(t, tc.maxLat, max.Y, 1e-9)
+		})
+	}
 }

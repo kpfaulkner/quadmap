@@ -3,6 +3,9 @@ package quadtree
 import (
 	"errors"
 	"fmt"
+	"math"
+
+	"github.com/peterstace/simplefeatures/geom"
 )
 
 // Misc functions for generating/calculating quadkeys
@@ -117,6 +120,24 @@ func (q QuadKey) SlippyCoords() (int32, int32, byte) {
 func (q QuadKey) Zoom() byte {
 	zoomLevel := byte(q & 0xFF)
 	return zoomLevel
+}
+
+// Envelope returns the lat/lon bounds of the slippy tile represented by a QuadKey.
+func (q QuadKey) Envelope() (geom.Envelope, error) {
+	x, y, z := q.SlippyCoords()
+	return geom.NewEnvelope([]geom.XY{
+		slippyTopLeftToLonLat(x, y, z),
+		slippyTopLeftToLonLat(x+1, y+1, z),
+	})
+}
+
+// From https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames#Tile_numbers_to_lon./lat.
+func slippyTopLeftToLonLat(x, y int32, z byte) geom.XY {
+	n := float64(uint64(1) << z)
+	lonDeg := float64(x)/n*360 - 180
+	latRad := math.Atan(math.Sinh(math.Pi * (1 - 2*float64(y)/n)))
+	latDeg := latRad * 180 / math.Pi
+	return geom.XY{X: lonDeg, Y: latDeg}
 }
 
 // GenerateMinMaxQuadKeysForZoom given a quadkey and a desired zoom level, keep converting
