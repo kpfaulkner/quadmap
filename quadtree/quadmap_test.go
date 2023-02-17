@@ -50,7 +50,7 @@ func TestHaveTileForSlippyGroupIDAndTileType(t *testing.T) {
 	tile, err = qm.CreateTileAtSlippyCoords(5, 5, 5, 2, 3)
 	assert.NoError(t, err, "Should not have error when adding tile")
 	assert.NotNil(t, tile, "Should have tile")
-	assert.Equal(t, uint64(0xcc0000000000005), tile.QuadKey, "QuadKey incorrect")
+	assert.Equal(t, QuadKey(0xcc0000000000005), tile.QuadKey, "QuadKey incorrect")
 
 	haveTile, err := qm.HaveTileForSlippyGroupIDAndTileType(5, 5, 5, 2, 3)
 	assert.NoError(t, err, "Should not have error when checking tile/group")
