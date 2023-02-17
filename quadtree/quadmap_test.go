@@ -32,11 +32,11 @@ func TestCreateTileAtSlippyCoords(t *testing.T) {
 	err := qm.AddTile(tile)
 	assert.Nil(t, err, "Should not have error when adding tile")
 
-	// quadindex for 1,1,1 is 0xc000000000000001
+	// quadindex for 1,1,1 is 0b1100000000000000000000000000000000000000000000000000000000000001
 	tile, err = qm.CreateTileAtSlippyCoords(1, 1, 1, 2, 3)
 	assert.NoError(t, err, "Should not have error when adding tile")
 	assert.NotNil(t, tile, "Should have tile")
-	assert.Equal(t, QuadKey(0xc000000000000001), tile.QuadKey, "QuadKey incorrect")
+	assert.Equal(t, QuadKey(0b1100000000000000000000000000000000000000000000000000000000000001), tile.QuadKey, "QuadKey incorrect")
 }
 
 // TestHaveTileForSlippyGroupIDAndTileType create quadmap and adds tile and check if exists
@@ -46,11 +46,11 @@ func TestHaveTileForSlippyGroupIDAndTileType(t *testing.T) {
 	err := qm.AddTile(tile)
 	assert.NoError(t, err, "Should not have error when adding tile")
 
-	// quadindex for 5,5,5 is 0xcc0000000000005
+	// quadindex for 5,5,5 is 0b110011000000000000000000000000000000000000000000000000000101
 	tile, err = qm.CreateTileAtSlippyCoords(5, 5, 5, 2, 3)
 	assert.NoError(t, err, "Should not have error when adding tile")
 	assert.NotNil(t, tile, "Should have tile")
-	assert.Equal(t, QuadKey(0xcc0000000000005), tile.QuadKey, "QuadKey incorrect")
+	assert.Equal(t, QuadKey(0b110011000000000000000000000000000000000000000000000000000101), tile.QuadKey, "QuadKey incorrect")
 
 	haveTile, err := qm.HaveTileForSlippyGroupIDAndTileType(5, 5, 5, 2, 3)
 	assert.NoError(t, err, "Should not have error when checking tile/group")
