@@ -3,8 +3,9 @@ package quadtree
 import (
 	"errors"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"math"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // TileDetailsGroup is same as TileDetails but we also want
@@ -245,9 +246,9 @@ func (qm *QuadMap) GetTileDetailsForQuadkey(quadKey QuadKey, tileDetails *TileDe
 	return qm.GetTileDetailsForQuadkey(parentQuadKey, tileDetails, false)
 }
 
-// GetBoundsForZoom returns the minx,miny,maxx,maxy slippy coords for a given zoom level
+// GetSlippyBoundsForGroupIDTileTypeAndZoom returns the minx,miny,maxx,maxy slippy coords for a given zoom level
 // extracted from the quadmap. Brute forcing it for now.
-func (qm *QuadMap) GetBoundsForZoom(groupID uint32, tileType TileType, zoom byte) (int32, int32, int32, int32, error) {
+func (qm *QuadMap) GetSlippyBoundsForGroupIDTileTypeAndZoom(groupID uint32, tileType TileType, zoom byte) (int32, int32, int32, int32, error) {
 
 	var minX int32 = math.MaxInt32
 	var minY int32 = math.MaxInt32
@@ -271,7 +272,7 @@ func (qm *QuadMap) GetBoundsForZoom(groupID uint32, tileType TileType, zoom byte
 
 				// only continue if precise zoom level OR this tile is considered full.
 				if z == zoom || g.Full {
-					minChild, maxChild, err := quadKey.GenerateMinMaxQuadKeysForZoom(zoom)
+					minChild, maxChild, err := quadKey.GetMinMaxEquivForZoomLevel(zoom)
 					if err != nil {
 						log.Errorf("error while generating min/max for quadkey %s", err.Error())
 						return 0, 0, 0, 0, err

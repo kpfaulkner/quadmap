@@ -1,7 +1,6 @@
 package quadtree
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -61,8 +60,8 @@ func TestHaveTileForSlippyGroupIDAndTileType(t *testing.T) {
 	assert.Error(t, err, "Should have error when checking tile/group")
 }
 
-// TestGetBoundsForZoom given a tile
-func TestGetBoundsForZoom(t *testing.T) {
+// TestGetSlippyBoundsForGroupIDTileTypeAndZoom
+func TestGetSlippyBoundsForGroupIDTileTypeAndZoom(t *testing.T) {
 	qm := NewQuadMap(10)
 	tile := NewTile(0, 0, 0)
 	err := qm.AddTile(tile)
@@ -73,8 +72,12 @@ func TestGetBoundsForZoom(t *testing.T) {
 	assert.NotNil(t, tile, "Should have tile")
 
 	tile.SetFullForGroupIDAndTileType(2, 3, true)
-	minX, minY, maxX, maxY, err := qm.GetBoundsForZoom(2, 3, 3)
+	minX, minY, maxX, maxY, err := qm.GetSlippyBoundsForGroupIDTileTypeAndZoom(2, 3, 3)
 	assert.NoError(t, err, "Should not have error when getting bounds")
 
-	fmt.Printf("%d %d %d %d\n", minX, minY, maxX, maxY)
+	// check min/max are top left and bottom right
+	assert.Equal(t, int32(6), minX, "MinX incorrect")
+	assert.Equal(t, int32(4), minY, "MinY incorrect")
+	assert.Equal(t, int32(7), maxX, "MaxX incorrect")
+	assert.Equal(t, int32(5), maxY, "MaxY incorrect")
 }

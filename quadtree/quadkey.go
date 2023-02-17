@@ -140,11 +140,12 @@ func slippyTopLeftToLonLat(x, y int32, z byte) geom.XY {
 	return geom.XY{X: lonDeg, Y: latDeg}
 }
 
-// GenerateMinMaxQuadKeysForZoom given a quadkey and a desired zoom level, keep converting
+// GetMinMaxEquivForZoomLevel given a quadkey and a desired zoom level, keep converting
 // quadkey to desired zoom level and get min/max quadkeys (top left, bottom right)
 // Practically this will only be valid if the tile associated with the quadKey is "full", but
 // it's up the caller to check this.
-func (q QuadKey) GenerateMinMaxQuadKeysForZoom(zoom byte) (QuadKey, QuadKey, error) {
+// This name utterly sucks, please suggest a better one.
+func (q QuadKey) GetMinMaxEquivForZoomLevel(zoom byte) (QuadKey, QuadKey, error) {
 	currentZoom := q.Zoom()
 	if currentZoom > zoom {
 		return 0, 0, errors.New("unable to generate min/max zooms")
