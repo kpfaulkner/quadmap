@@ -42,7 +42,7 @@ type GroupDetails struct {
 type Tile struct {
 	// stupid to keep it in here?
 	// Will also store the zoom level in the key.
-	QuadKey uint64
+	QuadKey QuadKey
 
 	// groups that have information for this tile. The IDs listed here can be used elsewhere to look up data.
 	// Not convinced that the groupdata *has* to be stored actually IN the tree.
@@ -89,7 +89,7 @@ func (t *Tile) HasTileType(groupID uint32, tt TileType) bool {
 
 // GetTileZoomLevel returns zoom level of tile
 func (t *Tile) GetTileZoomLevel() byte {
-	return GetTileZoomLevel(t.QuadKey)
+	return t.QuadKey.Zoom()
 }
 
 // SetFullForGroupIDAndTileType sets the full flag for a given tile type.
