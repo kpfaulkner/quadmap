@@ -1,6 +1,6 @@
 module github.com/kpfaulkner/quadmap
 
-go 1.19
+go 1.18
 
 require (
 	github.com/peterstace/simplefeatures v0.41.0
