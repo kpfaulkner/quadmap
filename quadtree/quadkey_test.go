@@ -75,12 +75,12 @@ func TestGetChildQuadKeyForPos(t *testing.T) {
 // based off an original quadkey and zoom target
 func TestGenerateMinMaxQuadKeysForZoom(t *testing.T) {
 
-	minChild, maxChild, err := GenerateMinMaxQuadKeysForZoom(quadKey, 7)
+	minChild, maxChild, err := quadKey.GenerateMinMaxQuadKeysForZoom(7)
 	assert.NoErrorf(t, err, "no error expected")
 	assert.Equal(t, Child0, minChild, "min child incorrect")
 	assert.Equal(t, Child3, maxChild, "max child incorrect")
 
-	minChild, maxChild, err = GenerateMinMaxQuadKeysForZoom(quadKey, 21)
+	minChild, maxChild, err = quadKey.GenerateMinMaxQuadKeysForZoom(21)
 	assert.NoErrorf(t, err, "no error expected")
 	assert.Equal(t, MinChildZoom21, minChild, "min child incorrect")
 	assert.Equal(t, MaxChildZoom21, maxChild, "max child incorrect")

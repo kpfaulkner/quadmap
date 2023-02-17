@@ -144,21 +144,17 @@ func slippyTopLeftToLonLat(x, y int32, z byte) geom.XY {
 // quadkey to desired zoom level and get min/max quadkeys (top left, bottom right)
 // Practically this will only be valid if the tile associated with the quadKey is "full", but
 // it's up the caller to check this.
-func GenerateMinMaxQuadKeysForZoom(quadKey QuadKey, zoom byte) (QuadKey, QuadKey, error) {
-	currentZoom := quadKey.Zoom()
+func (q QuadKey) GenerateMinMaxQuadKeysForZoom(zoom byte) (QuadKey, QuadKey, error) {
+	currentZoom := q.Zoom()
 	if currentZoom > zoom {
 		return 0, 0, errors.New("unable to generate min/max zooms")
 	}
 
-	minChild := quadKey
-	maxChild := quadKey
+	minChild := q
+	maxChild := q
 	for z := byte(0); z < zoom-currentZoom; z++ {
 		minChild, _ = minChild.ChildAtPos(0)
 		maxChild, _ = maxChild.ChildAtPos(3)
-	}
-
-	if minChild == 0 {
-		fmt.Printf("snoop\n")
 	}
 	return minChild, maxChild, nil
 }

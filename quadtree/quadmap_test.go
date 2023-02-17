@@ -1,6 +1,7 @@
 package quadtree
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -58,4 +59,22 @@ func TestHaveTileForSlippyGroupIDAndTileType(t *testing.T) {
 
 	_, err = qm.HaveTileForSlippyGroupIDAndTileType(5, 5, 5, 2, 4)
 	assert.Error(t, err, "Should have error when checking tile/group")
+}
+
+// TestGetBoundsForZoom given a tile
+func TestGetBoundsForZoom(t *testing.T) {
+	qm := NewQuadMap(10)
+	tile := NewTile(0, 0, 0)
+	err := qm.AddTile(tile)
+	assert.NoError(t, err, "Should not have error when adding tile")
+
+	tile, err = qm.CreateTileAtSlippyCoords(3, 2, 2, 2, 3)
+	assert.NoError(t, err, "Should not have error when adding tile")
+	assert.NotNil(t, tile, "Should have tile")
+
+	tile.SetFullForGroupIDAndTileType(2, 3, true)
+	minX, minY, maxX, maxY, err := qm.GetBoundsForZoom(2, 3, 3)
+	assert.NoError(t, err, "Should not have error when getting bounds")
+
+	fmt.Printf("%d %d %d %d\n", minX, minY, maxX, maxY)
 }
