@@ -1,6 +1,7 @@
 package quadtree
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -62,4 +63,32 @@ func TestGetChildQuadKeyForPos(t *testing.T) {
 	assert.Equal(t, Child3, childPos3, "Child quadkey incorrect")
 	assert.Equal(t, uint8(7), childPos3.Zoom(), "Child zoom level should be 7")
 
+}
+
+func TestEnv(t *testing.T) {
+	for _, tc := range []struct {
+		qk             QuadKey
+		minLon, minLat float64
+		maxLon, maxLat float64
+	}{
+		{
+			qk:     GenerateQuadKeyIndexFromSlippy(60292, 39326, 16),
+			minLon: 151.19384765625,
+			minLat: -33.86585445407186,
+			maxLon: 151.1993408203125,
+			maxLat: -33.861293113515515,
+		},
+	} {
+		// TODO: QuadKey.String()
+		t.Run(fmt.Sprint(tc.qk), func(t *testing.T) {
+			env, err := tc.qk.Envelope()
+			assert.NoError(t, err)
+			min, max, ok := env.MinMaxXYs()
+			assert.True(t, ok)
+			assert.InDelta(t, tc.minLon, min.X, 1e-9)
+			assert.InDelta(t, tc.minLat, min.Y, 1e-9)
+			assert.InDelta(t, tc.maxLon, max.X, 1e-9)
+			assert.InDelta(t, tc.maxLat, max.Y, 1e-9)
+		})
+	}
 }
