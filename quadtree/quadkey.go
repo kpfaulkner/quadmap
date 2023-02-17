@@ -123,8 +123,8 @@ func (q QuadKey) Zoom() byte {
 // quadkey to desired zoom level and get min/max quadkeys (top left, bottom right)
 // Practically this will only be valid if the tile associated with the quadKey is "full", but
 // it's up the caller to check this.
-func GenerateMinMaxQuadKeysForZoom(quadKey uint64, zoom byte) (uint64, uint64, error) {
-	currentZoom := GetTileZoomLevel(quadKey)
+func GenerateMinMaxQuadKeysForZoom(quadKey QuadKey, zoom byte) (QuadKey, QuadKey, error) {
+	currentZoom := quadKey.Zoom()
 	if currentZoom > zoom {
 		return 0, 0, errors.New("unable to generate min/max zooms")
 	}
@@ -132,9 +132,12 @@ func GenerateMinMaxQuadKeysForZoom(quadKey uint64, zoom byte) (uint64, uint64, e
 	minChild := quadKey
 	maxChild := quadKey
 	for z := byte(0); z < zoom-currentZoom; z++ {
-		minChild, _ = GetChildQuadKeyForPos(minChild, 0)
-		maxChild, _ = GetChildQuadKeyForPos(maxChild, 3)
+		minChild, _ = minChild.ChildAtPos(0)
+		maxChild, _ = maxChild.ChildAtPos(3)
 	}
 
+	if minChild == 0 {
+		fmt.Printf("snoop\n")
+	}
 	return minChild, maxChild, nil
 }

@@ -3,6 +3,7 @@ package quadtree
 import (
 	"errors"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"math"
 )
 
@@ -254,26 +255,45 @@ func (qm *QuadMap) GetBoundsForZoom(zoom byte) (int32, int32, int32, int32, erro
 	var maxY int32 = 0
 
 	for quadKey, _ := range qm.quadKeyMap {
-		z := GetTileZoomLevel(quadKey)
+		z := quadKey.Zoom()
 
 		if z > zoom {
 			// skip it...
 			continue
 		}
 
-		if z < zoom {
-			//
+		if quadKey == 0 {
+			//fmt.Printf("snoop\n")
+			continue // should this be in the quadMap at all?
+
 		}
-		x, y, _ := GenerateSlippyCoordsFromQuadKey(quadKey)
+		minChild, maxChild, err := GenerateMinMaxQuadKeysForZoom(quadKey, z)
+		if err != nil {
+			log.Errorf("error while generating min/max for quadkey %s", err.Error())
+			return 0, 0, 0, 0, err
+		}
+
+		x, y, _ := minChild.SlippyCoords()
+
+		if x == 0 {
+			fmt.Printf("snoop\n")
+		}
 		if x < minX {
 			minX = x
-		}
-		if x > maxX {
-			maxX = x
 		}
 		if y < minY {
 			minY = y
 		}
+
+		x, y, _ = maxChild.SlippyCoords()
+
+		if x == 1929934 {
+			fmt.Printf("snoop\n")
+		}
+		if x > maxX {
+			maxX = x
+		}
+
 		if y > maxY {
 			maxY = y
 		}
