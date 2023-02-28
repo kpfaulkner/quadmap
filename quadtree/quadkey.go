@@ -14,7 +14,7 @@ type QuadKey uint64
 
 // Parent get parents quadkey for passed quadkey
 func (q QuadKey) Parent() (QuadKey, error) {
-	zoomLevel := q & 0xFF
+	zoomLevel := q.Zoom()
 	parentZoomLevel := zoomLevel - 1
 
 	if parentZoomLevel <= 0 {
@@ -24,7 +24,7 @@ func (q QuadKey) Parent() (QuadKey, error) {
 	shift := 64 - (parentZoomLevel * 2)
 	parent := q >> shift
 	parent = parent << shift
-	parent |= parentZoomLevel
+	parent |= QuadKey(parentZoomLevel)
 
 	return parent, nil
 }
@@ -32,7 +32,7 @@ func (q QuadKey) Parent() (QuadKey, error) {
 // ChildAtPos where pos is 0-3
 // based off https://learn.microsoft.com/en-us/bingmaps/articles/bing-maps-tile-system?redirectedfrom=MSDN
 func (q QuadKey) ChildAtPos(pos int) (QuadKey, error) {
-	zoomLevel := q & 0xFF
+	zoomLevel := q.Zoom()
 
 	rightShift := 63 - (zoomLevel * 2) + 1
 	q = q >> rightShift
@@ -52,7 +52,7 @@ func (q QuadKey) ChildAtPos(pos int) (QuadKey, error) {
 
 	q = q << (64 - (zoomLevel * 2) - 2)
 
-	q |= zoomLevel + 1
+	q |= QuadKey(zoomLevel) + 1
 	return q, nil
 }
 
@@ -117,8 +117,9 @@ func (q QuadKey) SlippyCoords() (int32, int32, byte) {
 }
 
 // Zoom get the zoom level of the quadkey
+// Zoom is stored in lower 5 bits of quadkey
 func (q QuadKey) Zoom() byte {
-	zoomLevel := byte(q & 0xFF)
+	zoomLevel := byte(q & 0x1F)
 	return zoomLevel
 }
 
