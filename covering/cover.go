@@ -2,25 +2,28 @@ package covering
 
 import (
 	"container/heap"
-	"fmt"
-	"log"
 	"sort"
 
 	"github.com/kpfaulkner/quadmap/quadtree"
 	"github.com/peterstace/simplefeatures/geom"
 )
 
-type intersectionScore struct {
-	key   quadtree.QuadKey
-	score float64
+type coveringTile struct {
+	qk quadtree.QuadKey
+	// area of the tile that lies outside the geometry
+	outsideArea float64
 }
 
-type priorityQueue []intersectionScore
+type priorityQueue []coveringTile
 
-func (pq priorityQueue) Len() int           { return len(pq) }
-func (pq priorityQueue) Less(i, j int) bool { return pq[i].score < pq[j].score }
-func (pq priorityQueue) Swap(i, j int)      { pq[i], pq[j] = pq[j], pq[i] }
-func (pq *priorityQueue) Push(x any)        { *pq = append(*pq, x.(intersectionScore)) }
+func (pq priorityQueue) Len() int { return len(pq) }
+func (pq priorityQueue) Less(i, j int) bool {
+	// Tiles with more outside area should be processed first,
+	// so reverse the order.
+	return pq[i].outsideArea > pq[j].outsideArea
+}
+func (pq priorityQueue) Swap(i, j int) { pq[i], pq[j] = pq[j], pq[i] }
+func (pq *priorityQueue) Push(x any)   { *pq = append(*pq, x.(coveringTile)) }
 func (pq *priorityQueue) Pop() any {
 	old := *pq
 	n := len(old)
@@ -29,46 +32,56 @@ func (pq *priorityQueue) Pop() any {
 	return x
 }
 
-func scoreCell(q quadtree.QuadKey, g geom.Geometry) (intersectionScore, bool) {
-	keyGeom := q.Geom()
-	intersection, err := geom.Intersection(g, keyGeom)
+func intersection(qk quadtree.QuadKey, g geom.Geometry) (coveringTile, bool, error) {
+	tileEnv, err := qk.Envelope()
 	if err != nil {
-		log.Println(err)
-		return intersectionScore{}, false
+		return coveringTile{}, false, err
 	}
-	// TODO: use WGS84AreaSqM? The distortion won't matter in most cases.
+	intersection, err := geom.Intersection(g, tileEnv.AsGeometry())
+	if err != nil {
+		return coveringTile{}, false, err
+	}
 	if intersection.IsEmpty() {
-		return intersectionScore{}, false
+		return coveringTile{}, false, nil
 	}
-	ia := intersection.Area()
-	return intersectionScore{c, -(cg.Area() - ia)}, true
+	// TODO: correct area for web mercator distortion? Won't matter in most cases.
+	return coveringTile{qk, tileEnv.Area() - intersection.Area()}, true, nil
 }
 
-func ExteriorCovering(g geom.Geometry, maxCells int) []CellID { // TODO: minZoom
-	score, ok := scoreCell(ZoomZeroCell, g)
+// ExteriorCovering returns a set of QuadKeys that approximates a Geometry
+// with no more than maxTiles keys. The covering fully covers the geometry,
+// but may also include some area outside it.
+func ExteriorCovering(g geom.Geometry, maxTiles int) ([]quadtree.QuadKey, error) { // TODO: minZoom
+	score, ok, err := intersection(0, g)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	pq := priorityQueue{score}
 	for len(pq) > 0 {
-		cell := heap.Pop(&pq).(intersectionScore)
-		if cell.score == 0 {
+		cell := heap.Pop(&pq).(coveringTile)
+		if cell.outsideArea == 0 {
 			heap.Push(&pq, cell)
 			break
 		}
-		if _, _, z := cell.id.XYZ(); z >= MaxZoom {
+		if _, _, z := cell.qk.SlippyCoords(); z >= quadtree.MaxZoom {
 			heap.Push(&pq, cell)
 			break
 		}
 
-		var next []intersectionScore
-		for _, ch := range cell.id.Children() {
-			score, overlap := scoreCell(ch, g)
+		var next []coveringTile
+		for _, ch := range cell.qk.Children() {
+			score, overlap, err := intersection(ch, g)
+			if err != nil {
+				return nil, err
+			}
 			if overlap {
 				next = append(next, score)
 			}
 		}
-		if len(pq)+len(next) > maxCells {
+		if len(pq)+len(next) > maxTiles {
 			heap.Push(&pq, cell)
 			break
 		}
@@ -76,42 +89,49 @@ func ExteriorCovering(g geom.Geometry, maxCells int) []CellID { // TODO: minZoom
 			heap.Push(&pq, c)
 		}
 	}
-	cover := make([]CellID, len(pq))
+	cover := make([]quadtree.QuadKey, len(pq))
 	for i, c := range pq {
-		cover[i] = c.id
+		cover[i] = c.qk
 	}
-	return cover
+	return cover, nil
 }
 
-func AllAncestors(cells []CellID, minZoom int) []CellID {
-	seen := make(map[CellID]bool)
-	for _, c := range cells {
+func AllAncestors(quadKeys []quadtree.QuadKey, minZoom byte) ([]quadtree.QuadKey, error) {
+	seen := make(map[quadtree.QuadKey]bool)
+	for _, qk := range quadKeys {
 		for {
-			if _, _, z := c.XYZ(); z <= minZoom {
+			if qk.Zoom() <= minZoom {
 				break
 			}
-			c = c.Parent()
-			if seen[c] {
+			var err error
+			qk, err = qk.Parent()
+			if err != nil {
+				return nil, err
+			}
+			if seen[qk] {
 				break
 			}
-			seen[c] = true
+			seen[qk] = true
 		}
 	}
-	anc := make([]CellID, 0, len(seen))
+	ancestors := make([]quadtree.QuadKey, 0, len(seen))
 	for c := range seen {
-		anc = append(anc, c)
+		ancestors = append(ancestors, c)
 	}
-	return anc
+	return ancestors, nil
 }
 
-func SearchRanges(cells []CellID, minZoom int) []CellRange {
-	anc := AllAncestors(cells, minZoom)
-
-	ranges := make([]CellRange, 0, len(cells)+len(anc))
-	for _, c := range cells {
-		ranges = append(ranges, c.Range())
+func SearchRanges(quadKeys []quadtree.QuadKey, minZoom byte) ([]quadtree.QuadKeyRange, error) {
+	ancestors, err := AllAncestors(quadKeys, minZoom)
+	if err != nil {
+		return nil, err
 	}
-	for _, a := range anc {
+
+	ranges := make([]quadtree.QuadKeyRange, 0, len(quadKeys)+len(ancestors))
+	for _, qk := range quadKeys {
+		ranges = append(ranges, qk.Range())
+	}
+	for _, a := range ancestors {
 		ranges = append(ranges, a.SingleRange())
 	}
 	sort.Slice(ranges, func(i, j int) bool { return ranges[i].Start < ranges[j].Start })
@@ -120,12 +140,10 @@ func SearchRanges(cells []CellID, minZoom int) []CellRange {
 	for j := range ranges {
 		rj := &ranges[j]
 		if i == j {
-			fmt.Println(i, *rj)
 			continue
 		}
 
 		ri := &ranges[i]
-		fmt.Println(i, j, *ri, *rj)
 		if ri.End >= rj.Start || // ranges overlap
 			ri.End == rj.Start-1 { // ranges are contiguous (beware overflow)
 			if ri.End < rj.End {
@@ -138,5 +156,5 @@ func SearchRanges(cells []CellID, minZoom int) []CellRange {
 		i++
 		ranges[i] = ranges[j]
 	}
-	return ranges[:i+1]
+	return ranges[:i+1], nil
 }
