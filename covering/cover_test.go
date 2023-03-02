@@ -200,11 +200,11 @@ func TestSearchRanges(t *testing.T) {
 		{
 			name: "multiple tiles, minZoom > tile zoom, some contiguous",
 			cells: []quadtree.QuadKey{
-				15276209936040722436,
-				15060037153926938628,
-				15204152342002794500,
-				15420325124116578308,
-				15852670688344145924,
+				0xd400000000000004,
+				0xd100000000000004,
+				0xd300000000000004,
+				0xd600000000000004,
+				0xdc00000000000004,
 			},
 			minZoom: 5,
 			expect: []quadtree.QuadKeyRange{
