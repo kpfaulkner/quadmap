@@ -80,16 +80,6 @@ func (q QuadKey) Children() []QuadKey {
 
 // GenerateQuadKeyIndexFromSlippy generates the quadkey index from slippy coords
 func GenerateQuadKeyIndexFromSlippy(x uint32, y uint32, zoomLevel byte) QuadKey {
-	// var qk QuadKey
-	// for zoomLevel > 0 {
-	// 	qk |= QuadKey(x&1) << (63 - 2*(zoomLevel-1))
-	// 	qk |= QuadKey(y&1) << (63 - 2*(zoomLevel-1) + 1)
-	// 	x >>= 1
-	// 	y >>= 1
-	// 	zoomLevel--
-	// }
-	// qk |= QuadKey(zoomLevel)
-	// return qk
 	var binaryQuadkey QuadKey
 	for i := zoomLevel; i > 0; i-- {
 		var mask uint32 = 1 << (i - 1)
