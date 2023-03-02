@@ -18,11 +18,11 @@ const zoomMask = 0b11111
 
 // Parent get parents quadkey for passed quadkey
 func (q QuadKey) Parent() (QuadKey, error) {
-	z := q.Zoom()
-	if z <= 0 {
+	zoomLevel := q.Zoom()
+	if zoomLevel <= 0 {
 		return 0, errors.New("no parent")
 	}
-	parentZoomLevel := z - 1
+	parentZoomLevel := zoomLevel - 1
 
 	shift := 64 - (parentZoomLevel * 2)
 	parent := q >> shift
@@ -35,7 +35,7 @@ func (q QuadKey) Parent() (QuadKey, error) {
 // ChildAtPos where pos is 0-3
 // based off https://learn.microsoft.com/en-us/bingmaps/articles/bing-maps-tile-system?redirectedfrom=MSDN
 func (q QuadKey) ChildAtPos(pos int) (QuadKey, error) {
-	zoomLevel := q & zoomMask
+	zoomLevel := q.Zoom()
 	if zoomLevel >= MaxZoom {
 		return 0, fmt.Errorf("maximum zoom is %d", MaxZoom)
 	}
@@ -58,7 +58,7 @@ func (q QuadKey) ChildAtPos(pos int) (QuadKey, error) {
 
 	q = q << (64 - (zoomLevel * 2) - 2)
 
-	q |= zoomLevel + 1
+	q |= QuadKey(zoomLevel) + 1
 	return q, nil
 }
 
@@ -139,6 +139,7 @@ func (q QuadKey) SlippyCoords() (uint32, uint32, byte) {
 }
 
 // Zoom get the zoom level of the quadkey
+// Zoom is stored in lower 5 bits of quadkey
 func (q QuadKey) Zoom() byte {
 	zoomLevel := byte(q & zoomMask)
 	return zoomLevel
@@ -160,4 +161,24 @@ func slippyTopLeftToLonLat(x, y uint32, z byte) geom.XY {
 	latRad := math.Atan(math.Sinh(math.Pi * (1 - 2*float64(y)/n)))
 	latDeg := latRad * 180 / math.Pi
 	return geom.XY{X: lonDeg, Y: latDeg}
+}
+
+// GetMinMaxEquivForZoomLevel given a quadkey and a desired zoom level, keep converting
+// quadkey to desired zoom level and get min/max quadkeys (top left, bottom right)
+// Practically this will only be valid if the tile associated with the quadKey is "full", but
+// it's up the caller to check this.
+// This name utterly sucks, please suggest a better one.
+func (q QuadKey) GetMinMaxEquivForZoomLevel(zoom byte) (QuadKey, QuadKey, error) {
+	currentZoom := q.Zoom()
+	if currentZoom > zoom {
+		return 0, 0, errors.New("unable to generate min/max zooms")
+	}
+
+	minChild := q
+	maxChild := q
+	for z := byte(0); z < zoom-currentZoom; z++ {
+		minChild, _ = minChild.ChildAtPos(0)
+		maxChild, _ = maxChild.ChildAtPos(3)
+	}
+	return minChild, maxChild, nil
 }

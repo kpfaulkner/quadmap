@@ -59,3 +59,25 @@ func TestHaveTileForSlippyGroupIDAndTileType(t *testing.T) {
 	_, err = qm.HaveTileForSlippyGroupIDAndTileType(5, 5, 5, 2, 4)
 	assert.Error(t, err, "Should have error when checking tile/group")
 }
+
+// TestGetSlippyBoundsForGroupIDTileTypeAndZoom
+func TestGetSlippyBoundsForGroupIDTileTypeAndZoom(t *testing.T) {
+	qm := NewQuadMap(10)
+	tile := NewTile(0, 0, 0)
+	err := qm.AddTile(tile)
+	assert.NoError(t, err, "Should not have error when adding tile")
+
+	tile, err = qm.CreateTileAtSlippyCoords(3, 2, 2, 2, 3)
+	assert.NoError(t, err, "Should not have error when adding tile")
+	assert.NotNil(t, tile, "Should have tile")
+
+	tile.SetFullForGroupIDAndTileType(2, 3, true)
+	minX, minY, maxX, maxY, err := qm.GetSlippyBoundsForGroupIDTileTypeAndZoom(2, 3, 3)
+	assert.NoError(t, err, "Should not have error when getting bounds")
+
+	// check min/max are top left and bottom right
+	assert.Equal(t, uint32(6), minX, "MinX incorrect")
+	assert.Equal(t, uint32(4), minY, "MinY incorrect")
+	assert.Equal(t, uint32(7), maxX, "MaxX incorrect")
+	assert.Equal(t, uint32(5), maxY, "MaxY incorrect")
+}
