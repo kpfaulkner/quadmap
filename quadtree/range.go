@@ -9,6 +9,13 @@ type QuadKeyRange struct {
 
 // Range returns the range of QuadKeys that contains q and all of its descendants.
 func (q QuadKey) Range() (r QuadKeyRange) {
+	// The range calculated here also includes some false positives of keys at
+	// a lower zoom level in the 0,0 corner for the intervening levels. This
+	// isn't too bad, it won't be many and we just need to double check
+	// intersections with QuadKey.IsAncestorOf.
+	//
+	// TODO: find a way to avoid this. Keeping the zoom level in the lower bits
+	// might work, although that prevents combining adjacent ranges.
 	z := q.Zoom()
 	mask := ^uint64(0) >> (z * 2)
 	r.Start = uint64(q) & ^mask

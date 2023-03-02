@@ -62,6 +62,12 @@ func (q QuadKey) ChildAtPos(pos int) (QuadKey, error) {
 	return q, nil
 }
 
+// IsAncestorOf checks whether a QuadKey is an ancestor of (or equal to)
+// another QuadKey.
+func (q QuadKey) IsAncestorOf(desc QuadKey) bool {
+	return q.Zoom() <= desc.Zoom() && q.Range().Contains(desc)
+}
+
 // Children get all the quadkeys for the 4 children of the passed quadkey
 func (q QuadKey) Children() []QuadKey {
 	var children []QuadKey
