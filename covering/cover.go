@@ -121,6 +121,12 @@ func AllAncestors(quadKeys []quadtree.QuadKey, minZoom byte) ([]quadtree.QuadKey
 	return ancestors, nil
 }
 
+// SearchRanges takes a set of QuadKeys and returns a sorted list of ranges
+// that contain all of those tiles and any of their descendants.
+//
+// Note: these ranges also find a small number of keys outside those tiles (see
+// the note in QuadKey.Range()). Use QuadKey.IsAncestorOf() to filter those out
+// of the results.
 func SearchRanges(quadKeys []quadtree.QuadKey, minZoom byte) ([]quadtree.QuadKeyRange, error) {
 	ancestors, err := AllAncestors(quadKeys, minZoom)
 	if err != nil {
