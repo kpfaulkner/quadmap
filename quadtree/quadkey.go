@@ -8,18 +8,21 @@ import (
 	"github.com/peterstace/simplefeatures/geom"
 )
 
-// Misc functions for generating/calculating quadkeys
-
+// QuadKey is a key representing a Slippy tile.
 type QuadKey uint64
+
+const MaxZoom = 29
+
+// Zoom level is the bottom 5 bits
+const zoomMask = 0b11111
 
 // Parent get parents quadkey for passed quadkey
 func (q QuadKey) Parent() (QuadKey, error) {
 	zoomLevel := q.Zoom()
-	parentZoomLevel := zoomLevel - 1
-
-	if parentZoomLevel <= 0 {
+	if zoomLevel <= 0 {
 		return 0, errors.New("no parent")
 	}
+	parentZoomLevel := zoomLevel - 1
 
 	shift := 64 - (parentZoomLevel * 2)
 	parent := q >> shift
@@ -33,6 +36,9 @@ func (q QuadKey) Parent() (QuadKey, error) {
 // based off https://learn.microsoft.com/en-us/bingmaps/articles/bing-maps-tile-system?redirectedfrom=MSDN
 func (q QuadKey) ChildAtPos(pos int) (QuadKey, error) {
 	zoomLevel := q.Zoom()
+	if zoomLevel >= MaxZoom {
+		return 0, fmt.Errorf("maximum zoom is %d", MaxZoom)
+	}
 
 	rightShift := 63 - (zoomLevel * 2) + 1
 	q = q >> rightShift
@@ -47,13 +53,19 @@ func (q QuadKey) ChildAtPos(pos int) (QuadKey, error) {
 	case 3:
 		q = (q << 2) | 0b11
 	default:
-		return 0, errors.New(fmt.Sprintf("invalid pos %d", pos))
+		return 0, fmt.Errorf("invalid pos %d", pos)
 	}
 
 	q = q << (64 - (zoomLevel * 2) - 2)
 
 	q |= QuadKey(zoomLevel) + 1
 	return q, nil
+}
+
+// IsAncestorOf checks whether a QuadKey is an ancestor of (or equal to)
+// another QuadKey.
+func (q QuadKey) IsAncestorOf(desc QuadKey) bool {
+	return q.Zoom() <= desc.Zoom() && q.Range().Contains(desc)
 }
 
 // Children get all the quadkeys for the 4 children of the passed quadkey
@@ -84,9 +96,9 @@ func GenerateQuadKeyIndexFromSlippy(x uint32, y uint32, zoomLevel byte) QuadKey 
 }
 
 // SlippyCoords generates the slippy coords from quadkey index
-func (q QuadKey) SlippyCoords() (int32, int32, byte) {
-	var x int32
-	var y int32
+func (q QuadKey) SlippyCoords() (uint32, uint32, byte) {
+	var x uint32
+	var y uint32
 
 	zoomLevel := q.Zoom()
 
@@ -119,7 +131,7 @@ func (q QuadKey) SlippyCoords() (int32, int32, byte) {
 // Zoom get the zoom level of the quadkey
 // Zoom is stored in lower 5 bits of quadkey
 func (q QuadKey) Zoom() byte {
-	zoomLevel := byte(q & 0x1F)
+	zoomLevel := byte(q & zoomMask)
 	return zoomLevel
 }
 
@@ -133,7 +145,7 @@ func (q QuadKey) Envelope() (geom.Envelope, error) {
 }
 
 // From https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames#Tile_numbers_to_lon./lat.
-func slippyTopLeftToLonLat(x, y int32, z byte) geom.XY {
+func slippyTopLeftToLonLat(x, y uint32, z byte) geom.XY {
 	n := float64(uint64(1) << z)
 	lonDeg := float64(x)/n*360 - 180
 	latRad := math.Atan(math.Sinh(math.Pi * (1 - 2*float64(y)/n)))

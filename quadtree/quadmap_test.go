@@ -76,8 +76,8 @@ func TestGetSlippyBoundsForGroupIDTileTypeAndZoom(t *testing.T) {
 	assert.NoError(t, err, "Should not have error when getting bounds")
 
 	// check min/max are top left and bottom right
-	assert.Equal(t, int32(6), minX, "MinX incorrect")
-	assert.Equal(t, int32(4), minY, "MinY incorrect")
-	assert.Equal(t, int32(7), maxX, "MaxX incorrect")
-	assert.Equal(t, int32(5), maxY, "MaxY incorrect")
+	assert.Equal(t, uint32(6), minX, "MinX incorrect")
+	assert.Equal(t, uint32(4), minY, "MinY incorrect")
+	assert.Equal(t, uint32(7), maxX, "MaxX incorrect")
+	assert.Equal(t, uint32(5), maxY, "MaxY incorrect")
 }
