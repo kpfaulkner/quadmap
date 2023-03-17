@@ -248,12 +248,12 @@ func (qm *QuadMap) GetTileDetailsForQuadkey(quadKey QuadKey, tileDetails *TileDe
 
 // GetSlippyBoundsForGroupIDTileTypeAndZoom returns the minx,miny,maxx,maxy slippy coords for a given zoom level
 // extracted from the quadmap. Brute forcing it for now.
-func (qm *QuadMap) GetSlippyBoundsForGroupIDTileTypeAndZoom(groupID uint32, tileType TileType, zoom byte) (int32, int32, int32, int32, error) {
+func (qm *QuadMap) GetSlippyBoundsForGroupIDTileTypeAndZoom(groupID uint32, tileType TileType, zoom byte) (uint32, uint32, uint32, uint32, error) {
 
-	var minX int32 = math.MaxInt32
-	var minY int32 = math.MaxInt32
-	var maxX int32 = 0
-	var maxY int32 = 0
+	var minX uint32 = math.MaxUint32
+	var minY uint32 = math.MaxUint32
+	var maxX uint32 = 0
+	var maxY uint32 = 0
 
 	for quadKey, v := range qm.quadKeyMap {
 
