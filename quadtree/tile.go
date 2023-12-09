@@ -54,7 +54,7 @@ func (gd GroupDetails) Details() (uint32, TileType, bool) {
 type Tile struct {
 	// stupid to keep it in here?
 	// Will also store the zoom level in the key.
-	QuadKey QuadKey
+	//QuadKey QuadKey
 
 	// groups that have information for this tile. The IDs listed here can be used elsewhere to look up data.
 	// Not convinced that the groupdata *has* to be stored actually IN the tree.
@@ -63,10 +63,8 @@ type Tile struct {
 
 // NewTile creates a new tile at slippy co-ords x,y,z
 // Will probably only be used for root tile
-func NewTile(x uint32, y uint32, z byte) *Tile {
+func NewTile() *Tile {
 	t := &Tile{}
-	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
-	t.QuadKey = quadKey
 	return t
 }
 
@@ -94,11 +92,6 @@ func (t *Tile) HasTileType(groupID uint32, tt TileType) bool {
 		}
 	}
 	return false
-}
-
-// GetTileZoomLevel returns zoom level of tile
-func (t *Tile) GetTileZoomLevel() byte {
-	return t.QuadKey.Zoom()
 }
 
 // SetFullForGroupIDAndTileType sets the full flag for a given tile type.

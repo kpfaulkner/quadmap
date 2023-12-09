@@ -17,7 +17,7 @@ func setupSuite(t testing.T) func(t testing.T) {
 // TestSingleSetTileType tests setting of single groupid/tiletype
 func TestSingleSetTileType(t *testing.T) {
 
-	tile := NewTile(0, 0, 0)
+	tile := NewTile()
 	err := tile.SetTileType(1, 2)
 	assert.Nil(t, err, "Should not have error when setting tile type")
 
@@ -32,7 +32,7 @@ func TestSingleSetTileType(t *testing.T) {
 // TestTwoSetTileTypes tests setting of two unrelated groupid/tiletype
 func TestTwoSetTileTypes(t *testing.T) {
 
-	tile := NewTile(0, 0, 0)
+	tile := NewTile()
 	err := tile.SetTileType(1, 2)
 	assert.Nil(t, err, "Should not have error when setting tile type")
 
@@ -59,7 +59,7 @@ func TestTwoSetTileTypes(t *testing.T) {
 // TestDuplicateSetTileType tests setting of same groupid/tiletype twice
 func TestDuplicateSetTileType(t *testing.T) {
 
-	tile := NewTile(0, 0, 0)
+	tile := NewTile()
 	err := tile.SetTileType(1, 2)
 	assert.Nil(t, err, "Should not have error when setting tile type")
 
@@ -70,7 +70,7 @@ func TestDuplicateSetTileType(t *testing.T) {
 // TestHasTileTypeSuccess add groupid/tiletype and check if it exists
 func TestHasTileTypeSuccess(t *testing.T) {
 
-	tile := NewTile(0, 0, 0)
+	tile := NewTile()
 	err := tile.SetTileType(1, 2)
 	assert.Nil(t, err, "Should not have error when setting tile type")
 
@@ -81,7 +81,7 @@ func TestHasTileTypeSuccess(t *testing.T) {
 // TestHasTileTypeFail add groupid/tiletype and check for combination that does NOT exist
 func TestHasTileTypeFail(t *testing.T) {
 
-	tile := NewTile(0, 0, 0)
+	tile := NewTile()
 	err := tile.SetTileType(1, 2)
 	assert.Nil(t, err, "Should not have error when setting tile type")
 
@@ -92,7 +92,7 @@ func TestHasTileTypeFail(t *testing.T) {
 // TestHasTileTypeSuccessMultiple add multiple groupid/tiletype combinations and check the last one entered
 func TestHasTileTypeSuccessMultiple(t *testing.T) {
 
-	tile := NewTile(0, 0, 0)
+	tile := NewTile()
 	err := tile.SetTileType(1, 2)
 	assert.Nil(t, err, "Should not have error when setting tile type")
 
@@ -103,27 +103,10 @@ func TestHasTileTypeSuccessMultiple(t *testing.T) {
 	assert.True(t, hasTT, "Should have found groupid/tiletype")
 }
 
-// TestGetTileZoomLevel extracts zoom level from quadkey
-// Picks a few zoom levels and checks
-func TestGetTileZoomLevel(t *testing.T) {
-
-	tile := NewTile(0, 0, 14)
-	zoom := tile.GetTileZoomLevel()
-	assert.Equal(t, byte(14), zoom, "Should have zoom level of 14")
-
-	tile = NewTile(0, 0, 16)
-	zoom = tile.GetTileZoomLevel()
-	assert.Equal(t, byte(16), zoom, "Should have zoom level of 16")
-
-	tile = NewTile(0, 0, 21)
-	zoom = tile.GetTileZoomLevel()
-	assert.Equal(t, byte(21), zoom, "Should have zoom level of 21")
-}
-
 // TestSetFullForGroupIDAndTileType sets the full flag for a given groupid/tiletype combo
 func TestSetFullForGroupIDAndTileType(t *testing.T) {
 
-	tile := NewTile(0, 0, 14)
+	tile := NewTile()
 	err := tile.SetTileType(1, 2)
 	assert.Nil(t, err, "Should not have error when setting tile type")
 
@@ -139,7 +122,7 @@ func TestSetFullForGroupIDAndTileType(t *testing.T) {
 // then retrieves it!
 func TestGetFullForGroupIDAndTileType(t *testing.T) {
 
-	tile := NewTile(0, 0, 14)
+	tile := NewTile()
 	err := tile.SetTileType(1, 2)
 	assert.Nil(t, err, "Should not have error when setting tile type")
 
