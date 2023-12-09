@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -38,6 +39,31 @@ func NewQuadMap(initialCapacity int) *QuadMap {
 	return &QuadMap{
 		quadKeyMap: make(map[QuadKey]*Tile, initialCapacity),
 	}
+}
+
+func (qm *QuadMap) DisplayStats() {
+	fmt.Printf("QuadMap len %d\n", len(qm.quadKeyMap))
+
+	groupSize := make(map[int]int)
+	// group sizes
+	groupTotal := 0
+	for _, v := range qm.quadKeyMap {
+		l := len(v.groups)
+		groupSize[l]++
+		groupTotal += len(v.groups)
+	}
+
+	var groupSizes []int
+	for k, _ := range groupSize {
+		groupSizes = append(groupSizes, k)
+	}
+
+	sort.Ints(groupSizes)
+	for _, k := range groupSizes {
+		fmt.Printf("groupsize %d : count %d\n", k, groupSize[k])
+	}
+
+	fmt.Printf("total groups (ie total tiles) %d\n", groupTotal)
 }
 
 // GetParentTile returns parent tile of passed in tile t
@@ -106,7 +132,8 @@ func (qm *QuadMap) GetTilesForTypeAndZoom(tt TileType, zoom byte) []*Tile {
 	for _, t := range qm.quadKeyMap {
 		if t.QuadKey.Zoom() == zoom {
 			for _, g := range t.groups {
-				if g.Type == tt {
+				_, ty, _ := g.Details()
+				if ty == tt {
 					tiles = append(tiles, t)
 				}
 			}
@@ -183,8 +210,9 @@ func (qm *QuadMap) HaveTileForGroupIDAndTileType(quadKey QuadKey, groupID uint32
 	// if actual quadkey exists, check tiletype and groupID
 	if t, ok := qm.quadKeyMap[quadKey]; ok {
 		for _, g := range t.groups {
-			if g.GroupID == groupID && g.Type == tileType {
-				if g.Full || actualTile {
+			gd, ty, full := g.Details()
+			if gd == groupID && ty == tileType {
+				if full || actualTile {
 					return true, nil
 				}
 			}
@@ -229,9 +257,10 @@ func (qm *QuadMap) GetTileDetailsForQuadkey(quadKey QuadKey, tileDetails *TileDe
 		// whatever groups are in tile t....  add the details to tileDetails but only if full (if we're processing parent)
 		for _, g := range t.groups {
 
+			gd, ty, full := g.Details()
 			// correct target level... so store all the tiles at this level... no?
-			if isTargetLevel || g.Full {
-				tileDetails.Groups = append(tileDetails.Groups, TileDetailsGroup{GroupDetails: GroupDetails{Full: g.Full, Type: g.Type, GroupID: g.GroupID}, QuadKey: quadKey})
+			if isTargetLevel || full {
+				tileDetails.Groups = append(tileDetails.Groups, TileDetailsGroup{GroupDetails: NewGroupDetails(gd, ty, full), QuadKey: quadKey})
 			}
 		}
 	}
@@ -268,10 +297,11 @@ func (qm *QuadMap) GetSlippyBoundsForGroupIDTileTypeAndZoom(groupID uint32, tile
 
 		// only get tiletype and groupID that we want. Also needs to be either equal zoom OR is full.
 		for _, g := range v.groups {
-			if g.GroupID == groupID && g.Type == tileType {
+			gd, ty, full := g.Details()
+			if gd == groupID && ty == tileType {
 
 				// only continue if precise zoom level OR this tile is considered full.
-				if z == zoom || g.Full {
+				if z == zoom || full {
 					minChild, maxChild, err := quadKey.GetMinMaxEquivForZoomLevel(zoom)
 					if err != nil {
 						log.Errorf("error while generating min/max for quadkey %s", err.Error())

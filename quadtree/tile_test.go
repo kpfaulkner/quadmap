@@ -22,10 +22,11 @@ func TestSingleSetTileType(t *testing.T) {
 	assert.Nil(t, err, "Should not have error when setting tile type")
 
 	// check groupID
-	assert.EqualValues(t, 1, tile.groups[0].GroupID, "GroupID should be 1")
+	gd, tt, _ := tile.groups[0].Details()
+	assert.EqualValues(t, 1, gd, "GroupID should be 1")
 
 	// check tiletype
-	assert.EqualValues(t, 2, tile.groups[0].Type, "TileType should be 2")
+	assert.EqualValues(t, 2, tt, "TileType should be 2")
 }
 
 // TestTwoSetTileTypes tests setting of two unrelated groupid/tiletype
@@ -40,17 +41,19 @@ func TestTwoSetTileTypes(t *testing.T) {
 
 	assert.Equal(t, 2, len(tile.groups), "Should have 2 groups")
 
+	gd0, tt0, _ := tile.groups[0].Details()
+	gd1, tt1, _ := tile.groups[1].Details()
 	// check groupID 0
-	assert.EqualValues(t, 1, tile.groups[0].GroupID, "GroupID should be 1")
+	assert.EqualValues(t, 1, gd0, "GroupID should be 1")
 
 	// check tiletype 0
-	assert.EqualValues(t, 2, tile.groups[0].Type, "TileType should be 2")
+	assert.EqualValues(t, 2, tt0, "TileType should be 2")
 
 	// check groupID 1
-	assert.EqualValues(t, 3, tile.groups[1].GroupID, "GroupID should be 3")
+	assert.EqualValues(t, 3, gd1, "GroupID should be 3")
 
 	// check tiletype 1
-	assert.EqualValues(t, 4, tile.groups[1].Type, "TileType should be 4")
+	assert.EqualValues(t, 4, tt1, "TileType should be 4")
 }
 
 // TestDuplicateSetTileType tests setting of same groupid/tiletype twice

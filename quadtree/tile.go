@@ -9,21 +9,33 @@ import "fmt"
 type TileType uint16
 
 // GroupDetails has bare information about the "group" that created the tile this is associated with.
-// GroupID is the ID of the data feed (simply has to be unique)
-// Type is the tiletype assocated with this group.
-// Full determines if this tile+groupID+type is "full"... if true then
-// all child tiles are also full/exist.
-// TODO(kpfaulkner) investigate if this can simply be changed to a uint64.
-type GroupDetails struct {
-	GroupID uint32
+// Split into first 32 bits are groupID, next 16 bits are tiletype, last 16 bits full flag.
+type GroupDetails uint64
 
-	// This tile is used for various tile types
-	// use as bitmask. Assumption that will not have more than 16 tile types.
-	Type TileType
+// NewGroupDetails make new GroupDetails (uint64)
+func NewGroupDetails(groupID uint32, tileType TileType, full bool) GroupDetails {
+	var gd GroupDetails
 
-	// This tile and all children/grandchildren/second cousins once removed etc... are present.
-	// Full is tiletype specific.
-	Full bool
+	gd = GroupDetails(groupID)
+	gd = gd << 16
+	gd |= GroupDetails(tileType)
+	gd = gd << 8
+
+	b := byte(0)
+	if full {
+		b = 1
+	}
+	gd |= GroupDetails(b)
+	return gd
+}
+
+func (gd GroupDetails) Details() (uint32, TileType, bool) {
+	full := (gd&0xFF != 0)
+	gd = gd >> 8
+	tt := TileType(gd & 0xFFFF)
+	gd = gd >> 16
+	id := uint32(gd)
+	return id, tt, full
 }
 
 // Tile is a node within a quadtree.
@@ -66,12 +78,8 @@ func (t *Tile) SetTileType(groupID uint32, tt TileType) error {
 		return fmt.Errorf("GroupID + TileType combination already exists")
 	}
 
-	g := GroupDetails{
-		GroupID: groupID,
-		Type:    tt,
-	}
-
-	t.groups = append(t.groups, g)
+	gd := NewGroupDetails(groupID, tt, false)
+	t.groups = append(t.groups, gd)
 	return nil
 }
 
@@ -80,7 +88,8 @@ func (t *Tile) SetTileType(groupID uint32, tt TileType) error {
 func (t *Tile) HasTileType(groupID uint32, tt TileType) bool {
 
 	for _, g := range t.groups {
-		if g.GroupID == groupID && g.Type == tt {
+		gd, t, _ := g.Details()
+		if gd == groupID && t == tt {
 			return true
 		}
 	}
@@ -98,20 +107,16 @@ func (t *Tile) SetFullForGroupIDAndTileType(groupID uint32, tileType TileType, f
 
 	// loop through groups... see if already have groupid + type match.
 	for i, g := range t.groups {
-		if g.GroupID == groupID && g.Type == tileType {
-			g.Full = full
-			t.groups[i] = g
+		gd, ty, _ := g.Details()
+		if gd == groupID && ty == tileType {
+			ggg := NewGroupDetails(gd, ty, full)
+			t.groups[i] = ggg
 			return nil
 		}
 	}
 
-	g := GroupDetails{
-		GroupID: groupID,
-		Type:    tileType,
-		Full:    full,
-	}
-
-	t.groups = append(t.groups, g)
+	ggg := NewGroupDetails(groupID, tileType, full)
+	t.groups = append(t.groups, ggg)
 	return nil
 }
 
@@ -123,8 +128,9 @@ func (t *Tile) GetFullForGroupIDAndTileType(groupID uint32, tileType TileType) b
 	// FIXME(kpfaulkner) measure perf and make judgement
 
 	for _, g := range t.groups {
-		if g.GroupID == groupID && g.Type == tileType {
-			return g.Full
+		gd, ty, full := g.Details()
+		if gd == groupID && ty == tileType {
+			return full
 		}
 	}
 
