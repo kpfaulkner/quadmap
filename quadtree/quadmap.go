@@ -6,6 +6,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/dolthub/swiss"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -30,28 +31,34 @@ type TileDetails struct {
 type QuadMap struct {
 
 	// map of quadkey to tile
-	quadKeyMap map[QuadKey]*Tile
+	//quadKeyMap map[QuadKey]*Tile
+
+	quadKeyMap *swiss.Map[QuadKey, *Tile]
 }
 
 // NewQuadMap create a new quadmap
 // Should provide a large initialCapacity when dealing with large quadtree structures
 func NewQuadMap(initialCapacity int) *QuadMap {
+
 	return &QuadMap{
-		quadKeyMap: make(map[QuadKey]*Tile, initialCapacity),
+		//quadKeyMap: make(map[QuadKey]*Tile, initialCapacity),
+		quadKeyMap: swiss.NewMap[QuadKey, *Tile](uint32(initialCapacity)),
 	}
 }
 
 func (qm *QuadMap) DisplayStats() {
-	fmt.Printf("QuadMap len %d\n", len(qm.quadKeyMap))
+	fmt.Printf("QuadMap len %d\n", qm.quadKeyMap.Count())
 
 	groupSize := make(map[int]int)
 	// group sizes
 	groupTotal := 0
-	for _, v := range qm.quadKeyMap {
+
+	qm.quadKeyMap.Iter(func(k QuadKey, v *Tile) (stop bool) {
 		l := len(v.groups)
 		groupSize[l]++
 		groupTotal += len(v.groups)
-	}
+		return false // continue
+	})
 
 	var groupSizes []int
 	for k, _ := range groupSize {
@@ -72,7 +79,7 @@ func (qm *QuadMap) GetParentTile(quadKey QuadKey) (*Tile, error) {
 	if err != nil {
 		return nil, err
 	}
-	parentTile, ok := qm.quadKeyMap[parentKey]
+	parentTile, ok := qm.quadKeyMap.Get(parentKey)
 	if !ok {
 		return nil, errors.New("parent tile not found")
 	}
@@ -86,7 +93,7 @@ func (qm *QuadMap) GetChildInPos(quadKey QuadKey, pos int) (*Tile, error) {
 	if err != nil {
 		return nil, err
 	}
-	childTile, ok := qm.quadKeyMap[childKey]
+	childTile, ok := qm.quadKeyMap.Get(childKey)
 	if !ok {
 		return nil, errors.New(fmt.Sprintf("child tile in pos %d not found", pos))
 	}
@@ -103,7 +110,7 @@ func (qm *QuadMap) GetExactTileForSlippy(x uint32, y uint32, z byte) (*Tile, err
 func (qm *QuadMap) GetExactTileForQuadKey(quadKey QuadKey) (*Tile, error) {
 
 	// if actual quadkey exists, return tile.
-	if t, ok := qm.quadKeyMap[quadKey]; ok {
+	if t, ok := qm.quadKeyMap.Get(quadKey); ok {
 		return t, nil
 	}
 	return nil, errors.New("no tile found")
@@ -117,11 +124,12 @@ func (qm *QuadMap) GetExactTileForQuadKey(quadKey QuadKey) (*Tile, error) {
 // information somewhere. Although for the limited test cases so far it's pretty much instant
 func (qm *QuadMap) NumberOfTilesForZoom(zoom byte) int {
 	count := 0
-	for k, _ := range qm.quadKeyMap {
+	qm.quadKeyMap.Iter(func(k QuadKey, v *Tile) (stop bool) {
 		if k.Zoom() == zoom {
 			count++
 		}
-	}
+		return false // continue
+	})
 	return count
 }
 
@@ -129,28 +137,29 @@ func (qm *QuadMap) NumberOfTilesForZoom(zoom byte) int {
 func (qm *QuadMap) GetTilesForTypeAndZoom(tt TileType, zoom byte) []*Tile {
 	tiles := []*Tile{}
 
-	for k, t := range qm.quadKeyMap {
+	qm.quadKeyMap.Iter(func(k QuadKey, v *Tile) (stop bool) {
 		if k.Zoom() == zoom {
-			for _, g := range t.groups {
+			for _, g := range v.groups {
 				_, ty, _ := g.Details()
 				if ty == tt {
-					tiles = append(tiles, t)
+					tiles = append(tiles, v)
 				}
 			}
 		}
-	}
+		return false // continue
+	})
 	return tiles
 }
 
 // NumberOfTiles returns number of tiles in quadmap
 func (qm *QuadMap) NumberOfTiles() int {
-	return len(qm.quadKeyMap)
+	return qm.quadKeyMap.Count()
 }
 
 // AddTile adds a pre-generated tile
 func (qm *QuadMap) AddTile(x uint32, y uint32, z byte, t *Tile) (QuadKey, error) {
 	qk := GenerateQuadKeyIndexFromSlippy(x, y, z)
-	qm.quadKeyMap[qk] = t
+	qm.quadKeyMap.Put(qk, t)
 	return qk, nil
 }
 
@@ -163,14 +172,14 @@ func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z uint32, groupI
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, byte(z))
 
 	// check if child exists.
-	if child, ok := qm.quadKeyMap[quadKey]; ok {
+	if child, ok := qm.quadKeyMap.Get(quadKey); ok {
 		child.SetTileType(groupID, tileType)
 		return quadKey, child, nil
 	}
 
 	t := &Tile{}
 	t.SetTileType(groupID, tileType)
-	qm.quadKeyMap[quadKey] = t
+	qm.quadKeyMap.Put(quadKey, t)
 	return quadKey, t, nil
 }
 
@@ -201,7 +210,7 @@ func (qm *QuadMap) HaveTileForSlippyGroupIDAndTileType(x uint32, y uint32, z byt
 func (qm *QuadMap) HaveTileForGroupIDAndTileType(quadKey QuadKey, groupID uint32, tileType TileType, actualTile bool) (bool, error) {
 
 	// if actual quadkey exists, check tiletype and groupID
-	if t, ok := qm.quadKeyMap[quadKey]; ok {
+	if t, ok := qm.quadKeyMap.Get(quadKey); ok {
 		for _, g := range t.groups {
 			gd, ty, full := g.Details()
 			if gd == groupID && ty == tileType {
@@ -245,7 +254,7 @@ func (qm *QuadMap) GetTileDetailsForQuadkey(quadKey QuadKey, tileDetails *TileDe
 		return nil
 	}
 
-	if t, ok := qm.quadKeyMap[quadKey]; ok {
+	if t, ok := qm.quadKeyMap.Get(quadKey); ok {
 
 		// whatever groups are in tile t....  add the details to tileDetails but only if full (if we're processing parent)
 		for _, g := range t.groups {
@@ -276,16 +285,16 @@ func (qm *QuadMap) GetSlippyBoundsForGroupIDTileTypeAndZoom(groupID uint32, tile
 	var minY uint32 = math.MaxUint32
 	var maxX uint32 = 0
 	var maxY uint32 = 0
+	var err error
 
-	for quadKey, v := range qm.quadKeyMap {
-
+	qm.quadKeyMap.Iter(func(quadKey QuadKey, v *Tile) (stop bool) {
 		if quadKey == 0 {
-			continue // should this be in the quadMap at all?
+			return false // should this be in the quadMap at all?
 		}
 
 		z := quadKey.Zoom()
 		if z > zoom {
-			continue
+			return false
 		}
 
 		// only get tiletype and groupID that we want. Also needs to be either equal zoom OR is full.
@@ -295,10 +304,12 @@ func (qm *QuadMap) GetSlippyBoundsForGroupIDTileTypeAndZoom(groupID uint32, tile
 
 				// only continue if precise zoom level OR this tile is considered full.
 				if z == zoom || full {
-					minChild, maxChild, err := quadKey.GetMinMaxEquivForZoomLevel(zoom)
+					var minChild QuadKey
+					var maxChild QuadKey
+					minChild, maxChild, err = quadKey.GetMinMaxEquivForZoomLevel(zoom)
 					if err != nil {
 						log.Errorf("error while generating min/max for quadkey %s", err.Error())
-						return 0, 0, 0, 0, err
+						return true
 					}
 
 					x, y, _ := minChild.SlippyCoords()
@@ -320,8 +331,8 @@ func (qm *QuadMap) GetSlippyBoundsForGroupIDTileTypeAndZoom(groupID uint32, tile
 				}
 			}
 		}
-
-	}
+		return false // continue
+	})
 
 	return minX, minY, maxX, maxY, nil
 }

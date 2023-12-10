@@ -76,8 +76,8 @@ func (t *Tile) SetTileType(groupID uint32, tt TileType) error {
 		return fmt.Errorf("GroupID + TileType combination already exists")
 	}
 
-	gd := NewGroupDetails(groupID, tt, false)
-	t.groups = append(t.groups, gd)
+	//gd := NewGroupDetails(groupID, tt, false)
+	//t.groups = append(t.groups, gd)
 	return nil
 }
 
@@ -108,8 +108,8 @@ func (t *Tile) SetFullForGroupIDAndTileType(groupID uint32, tileType TileType, f
 		}
 	}
 
-	ggg := NewGroupDetails(groupID, tileType, full)
-	t.groups = append(t.groups, ggg)
+	//ggg := NewGroupDetails(groupID, tileType, full)
+	//t.groups = append(t.groups, ggg)
 	return nil
 }
 
