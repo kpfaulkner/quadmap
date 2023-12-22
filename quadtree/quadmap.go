@@ -38,7 +38,7 @@ type QuadMap struct {
 	// persist to storage while creating
 	persistWhileCreating bool
 
-	storage Storage
+	storage *PebbleStorage
 }
 
 // NewQuadMap create a new quadmap
@@ -208,16 +208,14 @@ func (qm *QuadMap) HaveTileForGroupIDAndTileType(quadKey QuadKey, groupID uint32
 	// if actual quadkey exists, check tiletype and groupID
 	if tile, ok := qm.quadKeyMap[quadKey]; ok {
 		if tile.HasTileType(tileType) {
-			tileDetails, err := qm.storage.GetTileDetailsByTileType(quadKey, tileType)
+			tileDetail, err := qm.storage.GetTileDetailByTileTypeAndGroupID(quadKey, tileType, groupID)
 			if err != nil {
 				return false, err
 			}
 
-			for _, detail := range tileDetails.Details {
-				if detail.GroupID == groupID {
-					if detail.Full || actualTile {
-						return true, nil
-					}
+			if tileDetail.GroupID == groupID {
+				if tileDetail.Full || actualTile {
+					return true, nil
 				}
 			}
 		}
