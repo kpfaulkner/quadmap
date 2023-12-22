@@ -1,58 +1,7 @@
 package quadtree
 
-const (
-
-	// the positioning is type at bit X...  full at bit X-1
-	VertPos       = 1 << 31
-	VertFull      = 1 << 30
-	NorthPos      = 1 << 29
-	NorthFull     = 1 << 28
-	SouthPos      = 1 << 27
-	SouthFull     = 1 << 26
-	EastPos       = 1 << 25
-	EastFull      = 1 << 24
-	WestPos       = 1 << 23
-	WestFull      = 1 << 22
-	DemPos        = 1 << 21
-	DemFull       = 1 << 20
-	DsmPos        = 1 << 19
-	DsmFull       = 1 << 18
-	DtmPos        = 1 << 17
-	DtmFull       = 1 << 16
-	TrueOrthoPos  = 1 << 15
-	TrueOrthoFull = 1 << 14
-	DetailDtmPos  = 1 << 13
-	DetailDtmFull = 1 << 12
-	DetailDemPos  = 1 << 11
-	DetailDemFull = 1 << 10
-
-	VertType TileType = iota
-	NorthType
-	SouthType
-	EastType
-	WestType
-	DemType
-	DsmType
-	DtmType
-	TrueOrthoType
-	DetailDtmType
-	DetailDemType
-)
-
 var (
-	TileTypeLUT = map[TileType]int{
-		VertType:      VertPos,
-		NorthType:     NorthPos,
-		SouthType:     SouthPos,
-		EastType:      EastPos,
-		WestType:      WestPos,
-		DemType:       DemPos,
-		DsmType:       DsmPos,
-		DtmType:       DtmPos,
-		TrueOrthoType: TrueOrthoPos,
-		DetailDtmType: DetailDtmPos,
-		DetailDemType: DetailDemPos,
-	}
+	TileTypeLUT map[TileType]int
 )
 
 // TileType is the type of a given tile
@@ -66,6 +15,10 @@ type TileType uint32
 // Of course we could have multiple groups that cover this tile location and we dont know which of
 // those are full. This is where going off to PebbleDB would be required for more details.
 type Tile uint32
+
+func SetupTileLUT(lut map[TileType]int) {
+	TileTypeLUT = lut
+}
 
 // NewTile creates a new tile at slippy co-ords x,y,z
 // Will probably only be used for root tile

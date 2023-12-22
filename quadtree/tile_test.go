@@ -7,15 +7,34 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const (
+
+	// the positioning is type at bit X...  full at bit X-1
+	VertPos   = 1 << 31
+	VertFull  = 1 << 30
+	NorthPos  = 1 << 29
+	NorthFull = 1 << 28
+
+	VertType TileType = iota
+	NorthType
+)
+
 func setupSuite(t testing.T) func(t testing.T) {
 	log.Println("setup suite")
 
 	return func(t testing.T) {
+
 	}
 }
 
 // TestSingleSetTileTypeAndFull tests setting of single tiletype/full
 func TestSingleSetTileTypeAndFull(t *testing.T) {
+
+	m := map[TileType]int{
+		VertType:  VertPos,
+		NorthType: NorthPos,
+	}
+	SetupTileLUT(m)
 
 	tile := NewTile()
 	err := tile.SetTileType(VertType, false)
@@ -34,6 +53,12 @@ func TestSingleSetTileTypeAndFull(t *testing.T) {
 
 // TestTwoSetTileTypes tests setting of two unrelated groupid/tiletype
 func TestTwoSetTileTypes(t *testing.T) {
+
+	m := map[TileType]int{
+		VertType:  VertPos,
+		NorthType: NorthPos,
+	}
+	SetupTileLUT(m)
 
 	tile := NewTile()
 	err := tile.SetTileType(VertType, false)
