@@ -1,131 +1,111 @@
 package quadtree
 
-import "fmt"
+const (
+
+	// the positioning is type at bit X...  full at bit X-1
+	VertPos       = 1 << 31
+	VertFull      = 1 << 30
+	NorthPos      = 1 << 29
+	NorthFull     = 1 << 28
+	SouthPos      = 1 << 27
+	SouthFull     = 1 << 26
+	EastPos       = 1 << 25
+	EastFull      = 1 << 24
+	WestPos       = 1 << 23
+	WestFull      = 1 << 22
+	DemPos        = 1 << 21
+	DemFull       = 1 << 20
+	DsmPos        = 1 << 19
+	DsmFull       = 1 << 18
+	DtmPos        = 1 << 17
+	DtmFull       = 1 << 16
+	TrueOrthoPos  = 1 << 15
+	TrueOrthoFull = 1 << 14
+	DetailDtmPos  = 1 << 13
+	DetailDtmFull = 1 << 12
+	DetailDemPos  = 1 << 11
+	DetailDemFull = 1 << 10
+
+	VertType TileType = iota
+	NorthType
+	SouthType
+	EastType
+	WestType
+	DemType
+	DsmType
+	DtmType
+	TrueOrthoType
+	DetailDtmType
+	DetailDemType
+)
+
+var (
+	TileTypeLUT = map[TileType]int{
+		VertType:      VertPos,
+		NorthType:     NorthPos,
+		SouthType:     SouthPos,
+		EastType:      EastPos,
+		WestType:      WestPos,
+		DemType:       DemPos,
+		DsmType:       DsmPos,
+		DtmType:       DtmPos,
+		TrueOrthoType: TrueOrthoPos,
+		DetailDtmType: DetailDtmPos,
+		DetailDemType: DetailDemPos,
+	}
+)
 
 // TileType is the type of a given tile
 // Given we'll have very few tile types we could just use a byte, but
 // may eventually use this as a bitmask to help filtering. So will
 // keep it as a uint16 for now. Can change later if space becomes an issue
-type TileType uint16
+type TileType uint32
 
-// GroupDetails has bare information about the "group" that created the tile this is associated with.
-// Split into first 32 bits are groupID, next 16 bits are tiletype, last 16 bits full flag.
-type GroupDetails uint64
-
-// NewGroupDetails make new GroupDetails (uint64)
-func NewGroupDetails(groupID uint32, tileType TileType, full bool) GroupDetails {
-	var gd GroupDetails
-
-	gd = GroupDetails(groupID)
-	gd = gd << 16
-	gd |= GroupDetails(tileType)
-	gd = gd << 8
-
-	b := byte(0)
-	if full {
-		b = 1
-	}
-	gd |= GroupDetails(b)
-	return gd
-}
-
-func (gd GroupDetails) Details() (uint32, TileType, bool) {
-	full := (gd&0xFF != 0)
-	gd = gd >> 8
-	tt := TileType(gd & 0xFFFF)
-	gd = gd >> 16
-	id := uint32(gd)
-	return id, tt, full
-}
-
-// Tile is a node within a quadtree.
-// Although a Tile instance will only be in the quadmap once (for a given quadkey) it may
-// be the case that the same tile+quadkey is used by multiple "groups" and also for
-// multiple tiletypes within a group.
-//
-// For example, if we populate the quadmap with one set of data (called group1) and group1
-// in turn has information about tiletype1 and tiletype2, this means that we'll need to track at a per quadkey
-// level if the files are full (and for which tiletypes).
-// Once the caller then populates with a completely different group, then we'll need to store that information
-// as well (in the same tile). This means that we'll need to store a map of groupID -> GroupDetails.
-//
-// We *could* skip all this if we wanted a separate quadmap per group, but given we need to search all groups
-// at once, this would be incredibly inefficient
-type Tile struct {
-	// stupid to keep it in here?
-	// Will also store the zoom level in the key.
-	//QuadKey QuadKey
-
-	// groups that have information for this tile. The IDs listed here can be used elsewhere to look up data.
-	// Not convinced that the groupdata *has* to be stored actually IN the tree.
-	groups []GroupDetails
-}
+// Tile will now just be a bitmask indicating what type of tile (Vert, etc etc) is at this location
+// as well as if the tile (for that type) is full or not.
+// Of course we could have multiple groups that cover this tile location and we dont know which of
+// those are full. This is where going off to PebbleDB would be required for more details.
+type Tile uint32
 
 // NewTile creates a new tile at slippy co-ords x,y,z
 // Will probably only be used for root tile
-func NewTile() *Tile {
-	t := &Tile{}
+func NewTile() Tile {
+	t := Tile(0)
 	return t
 }
 
-// SetTileType for a given groupID and tiletype.
-// Checks if groupID + tiletype combination already exists. Returns error if so.
-func (t *Tile) SetTileType(groupID uint32, tt TileType) error {
+// SetTileType set the tile type for a given tile.
+// If filetype is not already full but parameter full is true then it will be set.
+// If filetype is already full but parameter is NOT full, then we will leave it as true.
+// Basically... *some* version of this tiletype is full... but will need to consult with
+// PebbleDB to figure out which. I *think* that's fine for now.
+func (t *Tile) SetTileType(tt TileType, full bool) error {
 
-	if t.HasTileType(groupID, tt) {
-		return fmt.Errorf("GroupID + TileType combination already exists")
+	posMask := Tile(TileTypeLUT[tt])
+
+	var fullMask Tile
+	if full {
+		fullMask = Tile(posMask >> 1)
 	}
 
-	gd := NewGroupDetails(groupID, tt, false)
-	t.groups = append(t.groups, gd)
+	// set it regardless
+	combined := posMask | fullMask
+	*t = *t | combined
+
 	return nil
 }
 
-// HasTileType... needs to loop through array. Hopefully wouldn't be too many
-// FIXME(kpfaulkner) measure and confirm
-func (t *Tile) HasTileType(groupID uint32, tt TileType) bool {
-
-	for _, g := range t.groups {
-		gd, t, _ := g.Details()
-		if gd == groupID && t == tt {
-			return true
-		}
-	}
-	return false
+func (t *Tile) HasTileType(tt TileType) bool {
+	posMask := Tile(TileTypeLUT[tt])
+	return *t&posMask != 0
 }
 
-// SetFullForGroupIDAndTileType sets the full flag for a given tile type.
-// Only creates Full map at this stage (saves us creating a potential mass of unused maps)
-func (t *Tile) SetFullForGroupIDAndTileType(groupID uint32, tileType TileType, full bool) error {
+// IsFullForTileType gets the full flag for a given tile type. Defaults to false if no flag found
+// Is it NOT checking groupID... so is not strictly reliable to determine which groupID caused it
+// to be full. This is probably more useful to just eliminate tiles that are not full.
+func (t *Tile) IsFullForTileType(tileType TileType) bool {
 
-	// loop through groups... see if already have groupid + type match.
-	for i, g := range t.groups {
-		gd, ty, _ := g.Details()
-		if gd == groupID && ty == tileType {
-			ggg := NewGroupDetails(gd, ty, full)
-			t.groups[i] = ggg
-			return nil
-		}
-	}
-
-	ggg := NewGroupDetails(groupID, tileType, full)
-	t.groups = append(t.groups, ggg)
-	return nil
-}
-
-// GetFullForGroupIDAndTileType gets the full flag for a given tile type. Defaults to false if no flag found
-func (t *Tile) GetFullForGroupIDAndTileType(groupID uint32, tileType TileType) bool {
-
-	// BAD BAD BAD, need to loop through on a tile to find if its full or not.
-	// BUT... not expecting that many overlaps for a single tile.
-	// FIXME(kpfaulkner) measure perf and make judgement
-
-	for _, g := range t.groups {
-		gd, ty, full := g.Details()
-		if gd == groupID && ty == tileType {
-			return full
-		}
-	}
-
-	return false
+	posMask := Tile(TileTypeLUT[tileType])
+	fullMask := Tile(posMask >> 1)
+	return *t|fullMask != 0
 }
