@@ -107,5 +107,5 @@ func (t *Tile) IsFullForTileType(tileType TileType) bool {
 
 	posMask := Tile(TileTypeLUT[tileType])
 	fullMask := Tile(posMask >> 1)
-	return *t|fullMask != 0
+	return *t&fullMask != 0
 }

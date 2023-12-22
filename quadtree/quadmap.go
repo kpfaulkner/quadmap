@@ -47,6 +47,7 @@ func NewQuadMap(initialCapacity int, persistWhileCreating bool) *QuadMap {
 	return &QuadMap{
 		quadKeyMap:           make(map[QuadKey]Tile, initialCapacity),
 		persistWhileCreating: persistWhileCreating,
+		storage:              NewPebbleStorage(),
 	}
 }
 
@@ -155,7 +156,7 @@ func (qm *QuadMap) AddTile(x uint32, y uint32, z byte, t Tile) (QuadKey, error) 
 	return qk, nil
 }
 
-// CreateTileAtSlippyCoords creates a tile to the quadmap at slippy coords
+// CreateTileAtSlippyCoords creates a tile to the quadmap at slippy coords and details stored in storage
 // If tile already exists at coords, then tile is modified with groupID/tiletype information
 // Tile is returned
 func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z byte, groupID uint32, tileType TileType, full bool) (QuadKey, error) {
