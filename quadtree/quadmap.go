@@ -3,21 +3,34 @@ package quadtree
 import (
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"math"
 	"sort"
 
 	log "github.com/sirupsen/logrus"
 )
 
-// TileDetailsGroup is same as TileDetails but we also want
+type TileDetailID uint32
+
+// TileDetail is same as TileDetails but we also want
 // the quadkey that gave us the match.
-// TileDetailsGroup is used when returning query results and NOT
+// TileDetails is used when returning query results and NOT
 // actually part of the quadmap itself.
+// This will be extended to include survey details etc etc...  I think.
 type TileDetail struct {
 	GroupID  uint32
 	TileType TileType
 	Scale    byte
-	Full     bool
+
+	// unsure if need
+	Full bool
+}
+
+// Hash returns a hash of the TileDetail. Used for making
+// unique index. Currently stupidly simple implementation but will
+// refactor if it turns out this is a bottleneck. FIXME(kpfaulkner)
+func (td TileDetail) Hash() uint32 {
+	return hash(fmt.Sprintf("%d:%d:%d", td.GroupID, td.TileType, td.Scale))
 }
 
 // TileDetails information about a tile, groups its associated with,
@@ -160,6 +173,7 @@ func (qm *QuadMap) AddTile(x uint32, y uint32, z byte, t Tile) (QuadKey, error) 
 // If tile already exists at coords, then tile is modified with groupID/tiletype information
 // Tile is returned
 func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z byte, groupID uint32, tileType TileType, full bool) (QuadKey, error) {
+
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
 
 	var child Tile
@@ -174,7 +188,7 @@ func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z byte, groupID 
 	}
 	qm.quadKeyMap[quadKey] = child
 
-	err := qm.storage.SetTileDetail(quadKey, TileDetail{GroupID: groupID, TileType: tileType, Scale: z, Full: full})
+	err := qm.storage.SetTileDetail(quadKey, TileDetail{GroupID: groupID, TileType: tileType, Scale: z})
 	return quadKey, err
 
 }
@@ -208,15 +222,13 @@ func (qm *QuadMap) HaveTileForGroupIDAndTileType(quadKey QuadKey, groupID uint32
 	// if actual quadkey exists, check tiletype and groupID
 	if tile, ok := qm.quadKeyMap[quadKey]; ok {
 		if tile.HasTileType(tileType) {
-			tileDetail, err := qm.storage.GetTileDetailByTileTypeAndGroupID(quadKey, tileType, groupID)
+			_, err := qm.storage.GetTileDetailByTileTypeAndGroupID(quadKey, tileType, groupID)
 			if err != nil {
 				return false, err
 			}
-
-			if tileDetail.GroupID == groupID {
-				if tileDetail.Full || actualTile {
-					return true, nil
-				}
+			isFull := tile.IsFullForTileType(tileType)
+			if isFull || actualTile {
+				return true, nil
 			}
 		}
 	}
@@ -360,4 +372,10 @@ func (qm *QuadMap) GetSlippyBoundsForGroupIDTileTypeAndZoom(groupID uint32, tile
 	}
 
 	return minX, minY, maxX, maxY, nil
+}
+
+func hash(s string) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(s))
+	return h.Sum32()
 }

@@ -4,23 +4,35 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	errs "errors"
+	"fmt"
 
 	"github.com/cockroachdb/pebble"
 	"github.com/pingcap/errors"
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	storageDetailPrefex = "detail"
+	storageTilePrefex   = "tile"
+)
+
 type Storage interface {
 
 	// GetTileDetails returns the details (groupID, tileType,  full status etc) from storage.
-	GetTileDetails(quadKey QuadKey) (TileDetails, error)
+	GetTile(quadKey QuadKey) (TileDetails, error)
 
 	// SetTileDetails sets the details (groupID, tileType,  full status etc) in storage.
 	// If groupID+scale+tileType already exists, then it will be overwritten.
-	SetTileDetail(quadKey QuadKey, detail TileDetail) error
+	SetTile(quadKey QuadKey, detail TileDetail) error
 
 	// GetTileDetailsGroupByTileType returns the details for a given tileType at location.
-	GetTileDetailByTileTypeAndGroupID(quadKey QuadKey, tileType TileType, groupID uint32) (TileDetails, error)
+	GetTileByTileTypeAndGroupID(quadKey QuadKey, tileType TileType, groupID uint32) (TileDetails, error)
+
+	// SetDetail sets the details into storage. This will be reused across multiple tiles
+	SetDetail(quadKey QuadKey, detail TileDetail) (TileDetailID, error)
+
+	// GetDetail returns the detail from storage
+	GetDetail(tileDetailID TileDetailID) (TileDetail, error)
 }
 
 type PebbleStorage struct {
@@ -47,15 +59,14 @@ func (ps *PebbleStorage) GetTileDetails(quadKey QuadKey) (TileDetails, error) {
 
 	key := make([]byte, 8)
 	binary.LittleEndian.PutUint64(key, uint64(quadKey))
-
 	bytes, closer, err := ps.pdb.Get(key)
-	defer closer.Close()
 	if err != nil {
-		if !errs.Is(err, pebble.ErrNotFound) {
+		// not a not-found... so return error.
+		return TileDetails{}, err
 
-			// not a not-found... so return error.
-			return TileDetails{}, err
-		}
+	}
+	if closer != nil {
+		defer closer.Close()
 	}
 
 	var existingDetails TileDetails
@@ -73,9 +84,10 @@ func (ps *PebbleStorage) GetTileDetails(quadKey QuadKey) (TileDetails, error) {
 // 3) store
 func (ps *PebbleStorage) SetTileDetail(quadKey QuadKey, details TileDetail) error {
 
+	// get details from storage (if they exist)
+
 	key := make([]byte, 8)
 	binary.LittleEndian.PutUint64(key, uint64(quadKey))
-
 	existingDetails, err := ps.GetTileDetails(quadKey)
 	if err != nil {
 		if !errs.Is(err, pebble.ErrNotFound) {
@@ -128,4 +140,45 @@ func (ps *PebbleStorage) GetTileDetailByTileTypeAndGroupID(quadKey QuadKey, tile
 		}
 	}
 	return TileDetail{}, errors.New("not found")
+}
+
+// SetDetail stores the TileDetail in storage. This will be reused across multiple tiles.
+func (ps *PebbleStorage) SetDetail(detail TileDetail) (TileDetailID, error) {
+	id := detail.Hash()
+
+	key := []byte(fmt.Sprintf("%s_%d", storageDetailPrefex, id))
+
+	bytes, err := json.Marshal(detail)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	err = ps.pdb.Set(key, bytes, pebble.NoSync)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	return TileDetailID(id), nil
+}
+
+func (ps *PebbleStorage) GetDetail(tileDetailID TileDetailID) (TileDetail, error) {
+	key := []byte(fmt.Sprintf("%s_%d", storageDetailPrefex, tileDetailID))
+
+	bytes, closer, err := ps.pdb.Get(key)
+	if err != nil {
+		// not a not-found... so return error.
+		return TileDetail{}, err
+	}
+
+	if closer != nil {
+		defer closer.Close()
+	}
+
+	var detail TileDetail
+	err = json.Unmarshal(bytes, &detail)
+	if err != nil {
+		return TileDetail{}, errors.Trace(err)
+	}
+
+	return detail, nil
 }
