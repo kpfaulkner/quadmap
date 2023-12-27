@@ -9,7 +9,7 @@ import (
 // TestAddTile create quadmap and adds tile
 func TestAddTile(t *testing.T) {
 	qm := NewQuadMap(10, false)
-	tile := NewTile()
+	tile := Tile{}
 	_, err := qm.AddTile(0, 0, 0, tile)
 	assert.NoError(t, err, "Should not have error when adding tile")
 }
@@ -17,7 +17,7 @@ func TestAddTile(t *testing.T) {
 // TestNumberOfTiles create quadmap and adds tile
 func TestNumberOfTiles(t *testing.T) {
 	qm := NewQuadMap(10, false)
-	tile := NewTile()
+	tile := Tile{}
 	_, err := qm.AddTile(0, 0, 0, tile)
 	assert.NoError(t, err, "Should not have error when adding tile")
 
@@ -28,7 +28,7 @@ func TestNumberOfTiles(t *testing.T) {
 // TestCreateTileAtSlippyCoords create quadmap and adds tile
 func TestCreateTileAtSlippyCoords(t *testing.T) {
 	qm := NewQuadMap(10, false)
-	tile := NewTile()
+	tile := Tile{}
 	_, err := qm.AddTile(0, 0, 0, tile)
 	assert.Nil(t, err, "Should not have error when adding tile")
 
@@ -42,7 +42,7 @@ func TestCreateTileAtSlippyCoords(t *testing.T) {
 // TestHaveTileForSlippyGroupIDAndTileType create quadmap and adds tile and check if exists
 func TestHaveTileForSlippyGroupIDAndTileType(t *testing.T) {
 	qm := NewQuadMap(10, false)
-	tile := NewTile()
+	tile := Tile{}
 	_, err := qm.AddTile(0, 0, 0, tile)
 	assert.NoError(t, err, "Should not have error when adding tile")
 

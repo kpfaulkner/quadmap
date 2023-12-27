@@ -1,64 +1,124 @@
 package quadtree
 
-var (
-	TileTypeLUT map[TileType]int
-)
-
 // TileType is the type of a given tile
 // Given we'll have very few tile types we could just use a byte, but
 // may eventually use this as a bitmask to help filtering. So will
 // keep it as a uint16 for now. Can change later if space becomes an issue
-type TileType uint32
+type TileType byte
 
-// Tile will now just be a bitmask indicating what type of tile (Vert, etc etc) is at this location
-// as well as if the tile (for that type) is full or not.
-// Of course we could have multiple groups that cover this tile location and we dont know which of
-// those are full. This is where going off to PebbleDB would be required for more details.
-type Tile uint32
+// TileTypeMask indicates TileType and full indication.
+// Something like: Vert|VertFull|North|NorthFull|South|SouthFull........
+type TileTypeMask uint32
 
-func SetupTileLUT(lut map[TileType]int) {
-	TileTypeLUT = lut
+type TileDetailID uint32
+
+// TileDetail contains 2 pieces of information.
+// First 32 bits is groupID
+// Second 32 bits is a mask of tiletype and indicator to say if full or not. (TileTypeMask )
+type TileDetail uint64
+
+func NewTileDetail(groupID uint32, tileType TileType, full bool) TileDetail {
+	td := TileDetail(groupID) << 32
+	td.SetTileTypeAndFull(tileType, full)
+	return td
 }
 
-// NewTile creates a new tile at slippy co-ords x,y,z
-// Will probably only be used for root tile
-func NewTile() Tile {
-	t := Tile(0)
-	return t
+// Hash returns a hash of the TileDetail. Used for making
+// unique index. Currently stupidly simple implementation but will
+// refactor if it turns out this is a bottleneck. FIXME(kpfaulkner)
+//func (td TileDetail) Hash() uint32 {
+//	return hash(fmt.Sprintf("%d:%d:%d", td.GroupID, td.TileType, td.Scale))
+//}
+
+// Tile information about a tile, groups its associated with,
+// tiletypes etc etc.
+// A lot of this may be stored out of memory on storage, so is NOT required
+// for querying the quadmap itself, but more for when you know you are interested
+// in a specific tile and want more details
+type Tile struct {
+	Details []TileDetail
 }
 
-// SetTileType set the tile type for a given tile.
-// If filetype is not already full but parameter full is true then it will be set.
-// If filetype is already full but parameter is NOT full, then we will leave it as true.
-// Basically... *some* version of this tiletype is full... but will need to consult with
-// PebbleDB to figure out which. I *think* that's fine for now.
-func (t *Tile) SetTileType(tt TileType, full bool) error {
-
-	posMask := Tile(TileTypeLUT[tt])
-
-	var fullMask Tile
-	if full {
-		fullMask = Tile(posMask >> 1)
+// SetTileType will add tileType to tile if it does not exist.
+func (t *Tile) SetTileTypeForGroupID(groupID uint32, tileType TileType, full bool) error {
+	found := false
+	for i, detail := range t.Details {
+		if detail.GetGroupID() == groupID {
+			found = true
+			err := detail.SetTileTypeAndFull(tileType, full)
+			if err != nil {
+				return err
+			}
+			t.Details[i] = detail
+			break
+		}
 	}
 
-	// set it regardless
-	combined := posMask | fullMask
-	*t = *t | combined
+	if !found {
+		td := NewTileDetail(groupID, tileType, full)
+		t.Details = append(t.Details, td)
+	}
 
 	return nil
 }
 
-func (t *Tile) HasTileType(tt TileType) bool {
-	posMask := Tile(TileTypeLUT[tt])
-	return *t&posMask != 0
+func (t TileDetail) GetGroupID() uint32 {
+	return uint32(t >> 32)
 }
 
-// IsFullForTileType gets the full flag for a given tile type. Defaults to false if no flag found
-// Is it NOT checking groupID... so is not strictly reliable to determine which groupID caused it
-// to be full. This is probably more useful to just eliminate tiles that are not full.
-func (t *Tile) IsFullForTileType(tileType TileType) bool {
+func (t TileDetail) GetTileTypeMask() uint32 {
+	return uint32(t & 0xFFFFFFFF)
+}
 
-	posMask := Tile(TileTypeLUT[tileType])
-	fullMask := Tile(posMask >> 1)
-	return *t&fullMask != 0
+func (t *TileDetail) SetTileTypeMask(mask uint32) {
+	cleared := *t & 0xFFFFFFFF00000000
+	cleared = cleared | TileDetail(mask)
+	*t = cleared
+}
+
+// GetTileTypes returns all the TileTypes for this tile.
+func (t TileDetail) GetTileTypes() []TileType {
+
+	var tileTypes []TileType
+
+	tileTypeMask := t.GetTileTypeMask()
+	for tt, typeBit := range TileLUT {
+		if tileTypeMask&typeBit == 1 {
+			tileTypes = append(tileTypes, tt)
+		}
+	}
+
+	return tileTypes
+}
+
+// HasTileType indicates if TileDetail has type and if its full
+func (t TileDetail) HasTileType(tt TileType) (bool, bool) {
+	tileTypeMask := t.GetTileTypeMask()
+	typeBit := TileLUT[tt]
+	return tileTypeMask&typeBit == 1, tileTypeMask&(typeBit+1) == 1
+}
+
+func setBit(n uint64, pos uint64) uint64 {
+	n |= uint64(1 << pos)
+	return n
+}
+
+func clearBit(n uint64, pos uint64) uint64 {
+	mask := uint64(^(1 << pos))
+	n &= mask
+	return n
+}
+
+func (t *TileDetail) SetTileTypeAndFull(tt TileType, full bool) error {
+
+	typeBit := TileLUT[tt]
+	*t = TileDetail(setBit(uint64(*t), uint64(typeBit)))
+
+	if full {
+		*t = TileDetail(setBit(uint64(*t), uint64(typeBit+1)))
+	} else {
+		*t = TileDetail(clearBit(uint64(*t), uint64(typeBit+1)))
+	}
+
+	return nil
 }

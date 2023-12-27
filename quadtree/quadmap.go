@@ -10,38 +10,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type TileDetailID uint32
-
-// TileDetail is same as TileDetails but we also want
-// the quadkey that gave us the match.
-// TileDetails is used when returning query results and NOT
-// actually part of the quadmap itself.
-// This will be extended to include survey details etc etc...  I think.
-type TileDetail struct {
-	GroupID  uint32
-	TileType TileType
-	Scale    byte
-
-	// unsure if need
-	Full bool
-}
-
-// Hash returns a hash of the TileDetail. Used for making
-// unique index. Currently stupidly simple implementation but will
-// refactor if it turns out this is a bottleneck. FIXME(kpfaulkner)
-func (td TileDetail) Hash() uint32 {
-	return hash(fmt.Sprintf("%d:%d:%d", td.GroupID, td.TileType, td.Scale))
-}
-
-// TileDetails information about a tile, groups its associated with,
-// tiletypes etc etc.
-// A lot of this may be stored out of memory on storage, so is NOT required
-// for querying the quadmap itself, but more for when you know you are interested
-// in a specific tile and want more details
-type TileDetails struct {
-	Details []TileDetail
-}
-
 // QuadMap is a quadtree in disguise...
 type QuadMap struct {
 
@@ -51,8 +19,12 @@ type QuadMap struct {
 	// persist to storage while creating
 	persistWhileCreating bool
 
-	storage *PebbleStorage
+	//storage *PebbleStorage
 }
+
+var (
+	TileLUT map[TileType]uint32
+)
 
 // NewQuadMap create a new quadmap
 // Should provide a large initialCapacity when dealing with large quadtree structures
@@ -60,8 +32,12 @@ func NewQuadMap(initialCapacity int, persistWhileCreating bool) *QuadMap {
 	return &QuadMap{
 		quadKeyMap:           make(map[QuadKey]Tile, initialCapacity),
 		persistWhileCreating: persistWhileCreating,
-		storage:              NewPebbleStorage(),
+		//storage:              NewPebbleStorage(),
 	}
+}
+
+func SetupTileLUT(lut map[TileType]uint32) {
+	TileLUT = lut
 }
 
 func (qm *QuadMap) DisplayStats() {
@@ -88,11 +64,11 @@ func (qm *QuadMap) DisplayStats() {
 func (qm *QuadMap) GetParentTile(quadKey QuadKey) (Tile, error) {
 	parentKey, err := quadKey.Parent()
 	if err != nil {
-		return 0, err
+		return Tile{}, err
 	}
 	parentTile, ok := qm.quadKeyMap[parentKey]
 	if !ok {
-		return 0, errors.New("parent tile not found")
+		return Tile{}, errors.New("parent tile not found")
 	}
 	return parentTile, nil
 }
@@ -102,11 +78,11 @@ func (qm *QuadMap) GetParentTile(quadKey QuadKey) (Tile, error) {
 func (qm *QuadMap) GetChildInPos(quadKey QuadKey, pos int) (Tile, error) {
 	childKey, err := quadKey.ChildAtPos(pos)
 	if err != nil {
-		return 0, err
+		return Tile{}, err
 	}
 	childTile, ok := qm.quadKeyMap[childKey]
 	if !ok {
-		return 0, errors.New(fmt.Sprintf("child tile in pos %d not found", pos))
+		return Tile{}, errors.New(fmt.Sprintf("child tile in pos %d not found", pos))
 	}
 	return childTile, nil
 }
@@ -124,7 +100,7 @@ func (qm *QuadMap) GetExactTileForQuadKey(quadKey QuadKey) (Tile, error) {
 	if t, ok := qm.quadKeyMap[quadKey]; ok {
 		return t, nil
 	}
-	return 0, errors.New("no tile found")
+	return Tile{}, errors.New("no tile found")
 }
 
 // NumberOfTilesForZoom returns number of tiles for a given zoom level.
@@ -144,18 +120,18 @@ func (qm *QuadMap) NumberOfTilesForZoom(zoom byte) int {
 }
 
 // GetTilesForTypeAndZoom gets tiles for a given tile type and zoom level
-func (qm *QuadMap) GetTilesForTypeAndZoom(tt TileType, zoom byte) []Tile {
-	tiles := []Tile{}
-
-	for k, t := range qm.quadKeyMap {
-		if k.Zoom() == zoom {
-			if t.HasTileType(tt) {
-				tiles = append(tiles, t)
-			}
-		}
-	}
-	return tiles
-}
+//func (qm *QuadMap) GetTilesForTypeAndZoom(tt TileType, zoom byte) []Tile {
+//	tiles := []Tile{}
+//
+//	for k, t := range qm.quadKeyMap {
+//		if k.Zoom() == zoom {
+//			if t.HasTileType(tt) {
+//				tiles = append(tiles, t)
+//			}
+//		}
+//	}
+//	return tiles
+//}
 
 // NumberOfTiles returns number of tiles in quadmap
 func (qm *QuadMap) NumberOfTiles() int {
@@ -180,16 +156,14 @@ func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z byte, groupID 
 	var ok bool
 	// check if child exists.
 	if child, ok = qm.quadKeyMap[quadKey]; ok {
-		child.SetTileType(tileType, full)
+		child.SetTileTypeForGroupID(groupID, tileType, full)
 	} else {
-		// create new tile
-		child = NewTile()
-		child.SetTileType(tileType, full)
+		child.SetTileTypeForGroupID(groupID, tileType, full)
 	}
 	qm.quadKeyMap[quadKey] = child
 
-	err := qm.storage.SetTileDetail(quadKey, TileDetail{GroupID: groupID, TileType: tileType, Scale: z})
-	return quadKey, err
+	//err := qm.storage.SetTileDetail(quadKey, TileDetail{GroupID: groupID, TileType: tileType, Scale: z})
+	return quadKey, nil
 
 }
 
@@ -219,16 +193,15 @@ func (qm *QuadMap) HaveTileForSlippyGroupIDAndTileType(x uint32, y uint32, z byt
 //     Returns tile (actual or parent), bool indicating if actual (true == actual, false == ancestor) and error
 func (qm *QuadMap) HaveTileForGroupIDAndTileType(quadKey QuadKey, groupID uint32, tileType TileType, actualTile bool) (bool, error) {
 
-	// if actual quadkey exists, check tiletype and groupID
+	// if QK exists and tileType exists...
+	// return if is actual tile (QK match) or tile is full
 	if tile, ok := qm.quadKeyMap[quadKey]; ok {
-		if tile.HasTileType(tileType) {
-			_, err := qm.storage.GetTileDetailByTileTypeAndGroupID(quadKey, tileType, groupID)
-			if err != nil {
-				return false, err
-			}
-			isFull := tile.IsFullForTileType(tileType)
-			if isFull || actualTile {
-				return true, nil
+		for _, td := range tile.Details {
+			if td.GetGroupID() == groupID {
+				typeExists, isFull := td.HasTileType(tileType)
+				if typeExists && (isFull || actualTile) {
+					return true, nil
+				}
 			}
 		}
 	}
@@ -249,62 +222,41 @@ func (qm *QuadMap) HaveTileForGroupIDAndTileType(quadKey QuadKey, groupID uint32
 	return found, nil
 }
 
-// GetTileDetailsForSlippyCoords returns details for the tile at slippy coord x,y,z.
+// GetTileForSlippyCoords returns tile for the tile at slippy coord x,y,z.
 // This may involve multiple groups (ie multiple data sets loaded into single quadmap) but
 // also different tiletypes as well.
-func (qm *QuadMap) GetTileDetailsForSlippyCoords(x uint32, y uint32, z byte) (TileDetails, error) {
+func (qm *QuadMap) GetTileForSlippyCoords(x uint32, y uint32, z byte) (Tile, error) {
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
-	var existingDetails TileDetails
-	return qm.GetTileDetailsForQuadkey(quadKey, existingDetails, true)
+	if tile, ok := qm.quadKeyMap[quadKey]; ok {
+		return tile, nil
+	}
+
+	return Tile{}, errors.New("no tile at coordinates")
 }
 
-// GetTileDetailsForQuadkey returns details for the tile for quadkey
-// This may involve multiple groups (ie multiple data sets loaded into single quadmap) but
-// also different tiletypes as well.
-// Goes through the ancestry if we do not want to target the level.
-func (qm *QuadMap) GetTileDetailsForQuadkey(quadKey QuadKey, existingDetails TileDetails, isTargetLevel bool) (TileDetails, error) {
+// GetTileDetailForQuadkeyAnyGeneration returns details for the tile for quadkey
+// This will go back through ancestry to collect TileDetails from ancestors that may cover the same
+// quadkey but at a higher level with a full indicator.
+func (qm *QuadMap) GetTileDetailsForQuadkeyAnyGeneration(quadKey QuadKey, existingDetails []TileDetail) ([]TileDetail, error) {
 
 	// high as we can go... cant do any more, so return nil
 	if quadKey == 0 {
 		return existingDetails, nil
 	}
 
-	var details TileDetails
-	var err error
-	if _, ok := qm.quadKeyMap[quadKey]; ok {
-
-		// check details in storage
-		details, err = qm.storage.GetTileDetails(quadKey)
-		if err != nil {
-			return TileDetails{}, err
-		}
+	var details []TileDetail
+	if tile, ok := qm.quadKeyMap[quadKey]; ok {
+		details = append(existingDetails, tile.Details...)
 	}
 
-	// if we only want the target level, then return details
-	if isTargetLevel {
-
-		// append to the details we already have.
-		existingDetails.Details = append(existingDetails.Details, details.Details...)
-		return existingDetails, nil
-	}
-
-	// if not target level, then loop through details and see if any are full
-	// if full, then add to details
-	for _, detail := range details.Details {
-		if detail.Full {
-			existingDetails.Details = append(existingDetails.Details, detail)
-		}
-	}
-
-	// go through parents
 	parentQuadKey, err := quadKey.Parent()
 	if err != nil {
 		// cant go any higher... stop the iteration.
 		return details, nil
 	}
 
-	// isTargetLevel false due to we're processing an ancestor now.
-	return qm.GetTileDetailsForQuadkey(parentQuadKey, existingDetails, false)
+	return qm.GetTileDetailsForQuadkeyAnyGeneration(parentQuadKey, details)
+
 }
 
 // GetSlippyBoundsForGroupIDTileTypeAndZoom returns the minx,miny,maxx,maxy slippy coords for a given zoom level
@@ -327,22 +279,16 @@ func (qm *QuadMap) GetSlippyBoundsForGroupIDTileTypeAndZoom(groupID uint32, tile
 			continue
 		}
 
-		// this is not the tile you're looking for.
-		if !tile.HasTileType(tileType) {
-			continue
-		}
-
-		tileDetails, err := qm.storage.GetTileDetails(quadKey)
-		if err != nil {
-			return 0, 0, 0, 0, err
-		}
-
 		// only get tiletype and groupID that we want. Also needs to be either equal zoom OR is full.
-		for _, detail := range tileDetails.Details {
-			if detail.GroupID == groupID && detail.TileType == tileType {
+		for _, detail := range tile.Details {
+			if detail.GetGroupID() == groupID {
+				hasTT, full := detail.HasTileType(tileType)
+				if !hasTT {
+					continue
+				}
 
 				// only continue if precise zoom level OR this tile is considered full.
-				if z == zoom || detail.Full {
+				if z == zoom || full {
 					minChild, maxChild, err := quadKey.GetMinMaxEquivForZoomLevel(zoom)
 					if err != nil {
 						log.Errorf("error while generating min/max for quadkey %s", err.Error())
