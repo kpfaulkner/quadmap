@@ -35,32 +35,34 @@ func NewTileDetail(groupID uint32, tileType TileType, full bool) TileDetail {
 // A lot of this may be stored out of memory on storage, so is NOT required
 // for querying the quadmap itself, but more for when you know you are interested
 // in a specific tile and want more details
-type Tile struct {
+type TileOrig struct {
 	Details []TileDetail
 }
 
-// SetTileType will add tileType to tile if it does not exist.
-func (t *Tile) SetTileTypeForGroupID(groupID uint32, tileType TileType, full bool) error {
-	found := false
-	for i, detail := range t.Details {
-		if detail.GetGroupID() == groupID {
-			found = true
-			err := detail.SetTileTypeAndFull(tileType, full)
-			if err != nil {
-				return err
-			}
-			t.Details[i] = detail
-			break
-		}
-	}
+type Tile bool
 
-	if !found {
-		td := NewTileDetail(groupID, tileType, full)
-		t.Details = append(t.Details, td)
-	}
-
-	return nil
-}
+//// SetTileType will add tileType to tile if it does not exist.
+//func (t *Tile) SetTileTypeForGroupID(groupID uint32, tileType TileType, full bool) error {
+//	found := false
+//	for i, detail := range t.Details {
+//		if detail.GetGroupID() == groupID {
+//			found = true
+//			err := detail.SetTileTypeAndFull(tileType, full)
+//			if err != nil {
+//				return err
+//			}
+//			t.Details[i] = detail
+//			break
+//		}
+//	}
+//
+//	if !found {
+//		td := NewTileDetail(groupID, tileType, full)
+//		t.Details = append(t.Details, td)
+//	}
+//
+//	return nil
+//}
 
 func (t TileDetail) GetGroupID() uint32 {
 	return uint32(t >> 32)

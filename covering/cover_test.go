@@ -126,7 +126,7 @@ func TestExternalCovering(t *testing.T) {
 			g, err := geom.UnmarshalWKT(tc.wkt)
 			require.NoError(t, err)
 
-			cov, err := ExteriorCovering(g, tc.maxCells)
+			cov, err := ExteriorCovering(g, tc.maxCells, quadtree.MaxZoom)
 			require.NoError(t, err)
 			assert.ElementsMatch(t, tc.expect, cov)
 		})

@@ -40,6 +40,11 @@ func SetupTileLUT(lut map[TileType]uint32) {
 	TileLUT = lut
 }
 
+// should not really exits
+func (qm *QuadMap) GetUnderlyingMap() map[QuadKey]Tile {
+	return qm.quadKeyMap
+}
+
 func (qm *QuadMap) DisplayStats() {
 	fmt.Printf("QuadMap len %d\n", len(qm.quadKeyMap))
 
@@ -64,11 +69,11 @@ func (qm *QuadMap) DisplayStats() {
 func (qm *QuadMap) GetParentTile(quadKey QuadKey) (Tile, error) {
 	parentKey, err := quadKey.Parent()
 	if err != nil {
-		return Tile{}, err
+		return false, err
 	}
 	parentTile, ok := qm.quadKeyMap[parentKey]
 	if !ok {
-		return Tile{}, errors.New("parent tile not found")
+		return false, errors.New("parent tile not found")
 	}
 	return parentTile, nil
 }
@@ -78,11 +83,11 @@ func (qm *QuadMap) GetParentTile(quadKey QuadKey) (Tile, error) {
 func (qm *QuadMap) GetChildInPos(quadKey QuadKey, pos int) (Tile, error) {
 	childKey, err := quadKey.ChildAtPos(pos)
 	if err != nil {
-		return Tile{}, err
+		return false, err
 	}
 	childTile, ok := qm.quadKeyMap[childKey]
 	if !ok {
-		return Tile{}, errors.New(fmt.Sprintf("child tile in pos %d not found", pos))
+		return false, errors.New(fmt.Sprintf("child tile in pos %d not found", pos))
 	}
 	return childTile, nil
 }
@@ -100,7 +105,7 @@ func (qm *QuadMap) GetExactTileForQuadKey(quadKey QuadKey) (Tile, error) {
 	if t, ok := qm.quadKeyMap[quadKey]; ok {
 		return t, nil
 	}
-	return Tile{}, errors.New("no tile found")
+	return false, errors.New("no tile found")
 }
 
 // NumberOfTilesForZoom returns number of tiles for a given zoom level.
@@ -152,14 +157,37 @@ func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z byte, groupID 
 
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
 
+	//var child Tile
+	//var ok bool
+
+	qm.quadKeyMap[quadKey] = true
+	//// check if child exists.
+	//if child, ok = qm.quadKeyMap[quadKey]; ok {
+	//	child.SetTileTypeForGroupID(groupID, tileType, full)
+	//} else {
+	//	child.SetTileTypeForGroupID(groupID, tileType, full)
+	//}
+	//qm.quadKeyMap[quadKey] = child
+
+	//err := qm.storage.SetTileDetail(quadKey, TileDetail{GroupID: groupID, TileType: tileType, Scale: z})
+	return quadKey, nil
+
+}
+
+// CreateTileAtSlippyCoords simply records the fact that at a given quadkey, we have *some* data.... but no idea what.
+// This will be used
+func (qm *QuadMap) CreateTileAtSlippyCoordsOrig(x uint32, y uint32, z byte, groupID uint32, tileType TileType, full bool) (QuadKey, error) {
+
+	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
+
 	var child Tile
-	var ok bool
-	// check if child exists.
-	if child, ok = qm.quadKeyMap[quadKey]; ok {
-		child.SetTileTypeForGroupID(groupID, tileType, full)
-	} else {
-		child.SetTileTypeForGroupID(groupID, tileType, full)
-	}
+	//var ok bool
+	//// check if child exists.
+	//if child, ok = qm.quadKeyMap[quadKey]; ok {
+	//	child.SetTileTypeForGroupID(groupID, tileType, full)
+	//} else {
+	//	child.SetTileTypeForGroupID(groupID, tileType, full)
+	//}
 	qm.quadKeyMap[quadKey] = child
 
 	//err := qm.storage.SetTileDetail(quadKey, TileDetail{GroupID: groupID, TileType: tileType, Scale: z})

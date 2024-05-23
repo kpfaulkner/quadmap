@@ -48,6 +48,50 @@ func intersection(qk quadtree.QuadKey, g geom.Geometry) (coveringTile, bool, err
 	return coveringTile{qk, tileEnv.Area() - intersection.Area()}, true, nil
 }
 
+// ExteriorCoveringForMaxZoom returns a set of QuadKeys that approximates a Geometry
+// with tiles/quadkeys that are at a maximum zoom/scale of maxZoom. The covering fully covers the geometry,
+// but may also include some area outside it.
+func ExteriorCoveringForMaxZoom(g geom.Geometry, maxZoom byte) ([]quadtree.QuadKey, error) { // TODO: minZoom
+	score, ok, err := intersection(0, g)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
+	}
+	pq := priorityQueue{score}
+	for len(pq) > 0 {
+		cell := heap.Pop(&pq).(coveringTile)
+		if cell.outsideArea == 0 {
+			heap.Push(&pq, cell)
+			break
+		}
+		if _, _, z := cell.qk.SlippyCoords(); z >= maxZoom {
+			heap.Push(&pq, cell)
+			break
+		}
+
+		var next []coveringTile
+		for _, ch := range cell.qk.Children() {
+			score, overlap, err := intersection(ch, g)
+			if err != nil {
+				return nil, err
+			}
+			if overlap {
+				next = append(next, score)
+			}
+		}
+		for _, c := range next {
+			heap.Push(&pq, c)
+		}
+	}
+	cover := make([]quadtree.QuadKey, len(pq))
+	for i, c := range pq {
+		cover[i] = c.qk
+	}
+	return cover, nil
+}
+
 // ExteriorCovering returns a set of QuadKeys that approximates a Geometry
 // with no more than maxTiles keys. The covering fully covers the geometry,
 // but may also include some area outside it.
