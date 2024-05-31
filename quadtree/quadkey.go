@@ -141,7 +141,7 @@ func (q QuadKey) Envelope() (geom.Envelope, error) {
 	return geom.NewEnvelope([]geom.XY{
 		slippyTopLeftToLonLat(x, y, z),
 		slippyTopLeftToLonLat(x+1, y+1, z),
-	})
+	}...), nil
 }
 
 // From https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames#Tile_numbers_to_lon./lat.

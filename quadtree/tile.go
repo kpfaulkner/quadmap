@@ -2,28 +2,73 @@ package quadtree
 
 import "fmt"
 
-// TileType is the type of a given tile
-// Given we'll have very few tile types we could just use a byte, but
-// may eventually use this as a bitmask to help filtering. So will
-// keep it as a uint16 for now. Can change later if space becomes an issue
 type TileType uint16
+type GroupID uint32
+
+const (
+	TileTypeNone      TileType = 0b00000000000000000
+	TileTypeVert      TileType = 0b00000000000000001
+	TileTypeEast      TileType = 0b00000000000000010
+	TileTypeNorth     TileType = 0b00000000000000100
+	TileTypeVert      TileType = 0b00000000000001000
+	TileTypeEast      TileType = 0b00000000000010000
+	TileTypeNorth     TileType = 0b00000000000100000
+	TileTypeSouth     TileType = 0b000000000001000000
+	TileTypeWest      TileType = 0b00000000010000000
+	TileTypeDsm       TileType = 0b00000000100000000
+	TileTypeTrueOrtho TileType = 0b00000001000000000
+	TileTypeNIR       TileType = 0b00000010000000000
+)
 
 // GroupDetails has bare information about the "group" that created the tile this is associated with.
-// GroupID is the ID of the data feed (simply has to be unique)
-// Type is the tiletype assocated with this group.
-// Full determines if this tile+groupID+type is "full"... if true then
-// all child tiles are also full/exist.
-// TODO(kpfaulkner) investigate if this can simply be changed to a uint64.
-type GroupDetails struct {
-	GroupID uint32
+// The first 32 bits is a unique identifier for the group
+// The next 32 bits are a combination of tiletype (can be maximum of 16) and a full flag.
+// eg.
+//
+//		|63-----------------32|31-----------------------------0|
+//		| GroupID             | TileType + Full                |
+//		|                     |00000000000000010000000000000001|
+//	    In this case, bit 16 is set (TileTypeVert) and bit 0 is set (Full). So GroupID has a tiletype of Vert and is full.
+//      where-as
+//		|                     |00000000000000100000000000000000|
+//      Has Type of East, but is not full.
 
-	// This tile is used for various tile types
-	// use as bitmask. Assumption that will not have more than 16 tile types.
-	Type TileType
+type GroupDetails uint64
 
-	// This tile and all children/grandchildren/second cousins once removed etc... are present.
-	// Full is tiletype specific.
-	Full bool
+func (gd GroupDetails) GroupID() GroupID {
+	return GroupID(gd >> 32)
+}
+
+// HasTileTypeAndFull returns if tiletype is set for the GroupDetails and if
+// the tile is full.
+func (gd GroupDetails) HasTileTypeAndFull(tileType TileType) (bool, bool) {
+	tt := uint32(gd >> 32)
+	hasTileType := uint16(tt>>16)&uint16(tileType) == 1
+	isFull := false
+	if hasTileType {
+		if uint16(tt)&uint16(tileType) == 1 {
+			isFull = true
+		}
+	}
+	return hasTileType, isFull
+}
+
+func (gd GroupDetails) SetTileTypeAndFull(tileType TileType, full bool) GroupDetails {
+
+	gd = gd | GroupDetails(uint32(tileType)<<16)
+	if full {
+		gd = gd | GroupDetails(tileType)
+	} else {
+		gd = gd & GroupDetails(^tileType)
+	}
+
+	return gd
+}
+
+func NewGroupDetails(gid GroupID, tt TileType, full bool) GroupDetails {
+	gd := GroupDetails(uint64(gid) << 32)
+	gd.SetTileTypeAndFull(tt, full)
+	return gd
 }
 
 // Tile is a node within a quadtree.
@@ -94,7 +139,7 @@ func (t *Tile) GetTileZoomLevel() byte {
 
 // SetFullForGroupIDAndTileType sets the full flag for a given tile type.
 // Only creates Full map at this stage (saves us creating a potential mass of unused maps)
-func (t *Tile) SetFullForGroupIDAndTileType(groupID uint32, tileType TileType, full bool) error {
+func (t *Tile) SetFullForGroupIDAndTileType(groupID uint32, full bool) error {
 
 	// loop through groups... see if already have groupid + type match.
 	for i, g := range t.groups {

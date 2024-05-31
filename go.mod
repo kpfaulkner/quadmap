@@ -1,9 +1,9 @@
 module github.com/kpfaulkner/quadmap
 
-go 1.18
+go 1.22
 
 require (
-	github.com/peterstace/simplefeatures v0.41.0
+	github.com/peterstace/simplefeatures v0.50.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.1
 )
