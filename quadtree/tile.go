@@ -6,18 +6,15 @@ type TileType uint16
 type GroupID uint32
 
 const (
-	TileTypeNone      TileType = 0b00000000000000000
-	TileTypeVert      TileType = 0b00000000000000001
-	TileTypeEast      TileType = 0b00000000000000010
-	TileTypeNorth     TileType = 0b00000000000000100
-	TileTypeVert      TileType = 0b00000000000001000
-	TileTypeEast      TileType = 0b00000000000010000
-	TileTypeNorth     TileType = 0b00000000000100000
-	TileTypeSouth     TileType = 0b000000000001000000
-	TileTypeWest      TileType = 0b00000000010000000
-	TileTypeDsm       TileType = 0b00000000100000000
-	TileTypeTrueOrtho TileType = 0b00000001000000000
-	TileTypeNIR       TileType = 0b00000010000000000
+	TileTypeNone      TileType = 0b000000000
+	TileTypeVert      TileType = 0b000000000001
+	TileTypeEast      TileType = 0b000000000010
+	TileTypeNorth     TileType = 0b000000000100
+	TileTypeSouth     TileType = 0b00000001000
+	TileTypeWest      TileType = 0b0000010000
+	TileTypeDsm       TileType = 0b0000100000
+	TileTypeTrueOrtho TileType = 0b0001000000
+	TileTypeNIR       TileType = 0b0010000000
 )
 
 // GroupDetails has bare information about the "group" that created the tile this is associated with.
@@ -51,6 +48,42 @@ func (gd GroupDetails) HasTileTypeAndFull(tileType TileType) (bool, bool) {
 		}
 	}
 	return hasTileType, isFull
+}
+
+func (gd GroupDetails) ReturnTileTypes() []TileType {
+	var tileTypes []TileType
+	if gd.HasTileType(TileTypeVert) {
+		tileTypes = append(tileTypes, TileTypeVert)
+	}
+	if gd.HasTileType(TileTypeEast) {
+		tileTypes = append(tileTypes, TileTypeEast)
+
+	}
+	if gd.HasTileType(TileTypeNorth) {
+		tileTypes = append(tileTypes, TileTypeNorth)
+	}
+	if gd.HasTileType(TileTypeSouth) {
+		tileTypes = append(tileTypes, TileTypeSouth)
+	}
+	if gd.HasTileType(TileTypeWest) {
+		tileTypes = append(tileTypes, TileTypeWest)
+	}
+	if gd.HasTileType(TileTypeDsm) {
+		tileTypes = append(tileTypes, TileTypeDsm)
+	}
+	if gd.HasTileType(TileTypeTrueOrtho) {
+		tileTypes = append(tileTypes, TileTypeTrueOrtho)
+	}
+	if gd.HasTileType(TileTypeNIR) {
+		tileTypes = append(tileTypes, TileTypeNIR)
+	}
+	return tileTypes
+}
+
+func (gd GroupDetails) HasTileType(tileType TileType) bool {
+	tt := uint32(gd >> 32)
+	hasTileType := uint16(tt>>16)&uint16(tileType) == 1
+	return hasTileType
 }
 
 func (gd GroupDetails) SetTileTypeAndFull(tileType TileType, full bool) GroupDetails {
@@ -105,27 +138,23 @@ func NewTile(x uint32, y uint32, z byte) *Tile {
 
 // SetTileType for a given groupID and tiletype.
 // Checks if groupID + tiletype combination already exists. Returns error if so.
-func (t *Tile) SetTileType(groupID uint32, tt TileType) error {
+func (t *Tile) SetTileType(groupID GroupID, tt TileType) error {
 
 	if t.HasTileType(groupID, tt) {
 		return fmt.Errorf("GroupID + TileType combination already exists")
 	}
 
-	g := GroupDetails{
-		GroupID: groupID,
-		Type:    tt,
-	}
-
-	t.groups = append(t.groups, g)
+	gd := NewGroupDetails(groupID, tt, false)
+	t.groups = append(t.groups, gd)
 	return nil
 }
 
 // HasTileType... needs to loop through array. Hopefully wouldn't be too many
 // FIXME(kpfaulkner) measure and confirm
-func (t *Tile) HasTileType(groupID uint32, tt TileType) bool {
+func (t *Tile) HasTileType(groupID GroupID, tt TileType) bool {
 
 	for _, g := range t.groups {
-		if g.GroupID == groupID && g.Type == tt {
+		if g.GroupID() == groupID && g.HasTileType(tt) {
 			return true
 		}
 	}
@@ -139,39 +168,32 @@ func (t *Tile) GetTileZoomLevel() byte {
 
 // SetFullForGroupIDAndTileType sets the full flag for a given tile type.
 // Only creates Full map at this stage (saves us creating a potential mass of unused maps)
-func (t *Tile) SetFullForGroupIDAndTileType(groupID uint32, full bool) error {
+func (t *Tile) SetFullForGroupIDAndTileType(groupID GroupID, tileType TileType, full bool) error {
 
 	// loop through groups... see if already have groupid + type match.
-	for i, g := range t.groups {
-		if g.GroupID == groupID && g.Type == tileType {
-			g.Full = full
-			t.groups[i] = g
+	for _, g := range t.groups {
+		if g.GroupID() == groupID && g.HasTileType(tileType) {
+			g.SetTileTypeAndFull(tileType, full)
 			return nil
 		}
 	}
 
-	g := GroupDetails{
-		GroupID: groupID,
-		Type:    tileType,
-		Full:    full,
-	}
-
-	t.groups = append(t.groups, g)
+	gd := NewGroupDetails(groupID, tileType, full)
+	t.groups = append(t.groups, gd)
 	return nil
 }
 
 // GetFullForGroupIDAndTileType gets the full flag for a given tile type. Defaults to false if no flag found
-func (t *Tile) GetFullForGroupIDAndTileType(groupID uint32, tileType TileType) bool {
-
-	// BAD BAD BAD, need to loop through on a tile to find if its full or not.
-	// BUT... not expecting that many overlaps for a single tile.
-	// FIXME(kpfaulkner) measure perf and make judgement
+func (t *Tile) GetFullForGroupIDAndTileType(groupID GroupID, tileType TileType) bool {
 
 	for _, g := range t.groups {
-		if g.GroupID == groupID && g.Type == tileType {
-			return g.Full
+		if g.GroupID() == groupID {
+			hasTileType, isFull := g.HasTileTypeAndFull(tileType)
+			if hasTileType {
+				return isFull
+			}
+
 		}
 	}
-
 	return false
 }

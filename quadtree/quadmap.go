@@ -106,7 +106,7 @@ func (qm *QuadMap) GetTilesForTypeAndZoom(tt TileType, zoom byte) []*Tile {
 	for _, t := range qm.quadKeyMap {
 		if t.QuadKey.Zoom() == zoom {
 			for _, g := range t.groups {
-				if g.Type == tt {
+				if g.HasTileType(tt) {
 					tiles = append(tiles, t)
 				}
 			}
@@ -129,7 +129,7 @@ func (qm *QuadMap) AddTile(t *Tile) error {
 // CreateTileAtSlippyCoords creates a tile to the quadmap at slippy coords
 // If tile already exists at coords, then tile is modified with groupID/tiletype information
 // Tile is returned
-func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z uint32, groupID uint32, tileType TileType) (*Tile, error) {
+func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z uint32, groupID GroupID, tileType TileType) (*Tile, error) {
 
 	// x,y,z are already child coords...  so no need to take pos into account
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, byte(z))
@@ -156,7 +156,7 @@ func createChildForPos(childQuadKey QuadKey, pos int) (*Tile, error) {
 
 // HaveTileForSlippyGroupIDAndTileType returns bool indicating if we have details for a tile at the provided
 // slippy co-ords but also matching the tiletype and groupID.
-func (qm *QuadMap) HaveTileForSlippyGroupIDAndTileType(x uint32, y uint32, z byte, groupID uint32, tileType TileType) (bool, error) {
+func (qm *QuadMap) HaveTileForSlippyGroupIDAndTileType(x uint32, y uint32, z byte, groupID GroupID, tileType TileType) (bool, error) {
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
 	return qm.HaveTileForGroupIDAndTileType(quadKey, groupID, tileType, true)
 }
@@ -178,14 +178,17 @@ func (qm *QuadMap) HaveTileForSlippyGroupIDAndTileType(x uint32, y uint32, z byt
 //
 //     What happens if we hit a parent that is NOT full? No tile therefore return error?
 //     Returns tile (actual or parent), bool indicating if actual (true == actual, false == ancestor) and error
-func (qm *QuadMap) HaveTileForGroupIDAndTileType(quadKey QuadKey, groupID uint32, tileType TileType, actualTile bool) (bool, error) {
+func (qm *QuadMap) HaveTileForGroupIDAndTileType(quadKey QuadKey, groupID GroupID, tileType TileType, actualTile bool) (bool, error) {
 
 	// if actual quadkey exists, check tiletype and groupID
 	if t, ok := qm.quadKeyMap[quadKey]; ok {
 		for _, g := range t.groups {
-			if g.GroupID == groupID && g.Type == tileType {
-				if g.Full || actualTile {
-					return true, nil
+			if g.GroupID() == groupID {
+				hasTileType, isFull := g.HasTileTypeAndFull(tileType)
+				if hasTileType {
+					if isFull || actualTile {
+						return true, nil
+					}
 				}
 			}
 		}
@@ -209,15 +212,14 @@ func (qm *QuadMap) HaveTileForGroupIDAndTileType(quadKey QuadKey, groupID uint32
 // GetTileDetailsForSlippyCoords returns details for the tile at slippy coord x,y,z.
 // This may involve multiple groups (ie multiple data sets loaded into single quadmap) but
 // also different tiletypes as well.
-func (qm *QuadMap) GetTileDetailsForSlippyCoords(x uint32, y uint32, z byte, tileDetails *TileDetails) error {
+func (qm *QuadMap) GetTileDetailsForSlippyCoordsAndTileType(x uint32, y uint32, z byte, tileType TileType, tileDetails *TileDetails) error {
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
-	return qm.GetTileDetailsForQuadkey(quadKey, tileDetails, true)
+	return qm.GetTileDetailsForQuadkeyAndTileType(quadKey, tileType, tileDetails, true)
 }
 
-// GetTileDetailsForQuadkey returns details for the tile for quadkey
-// This may involve multiple groups (ie multiple data sets loaded into single quadmap) but
-// also different tiletypes as well.
-func (qm *QuadMap) GetTileDetailsForQuadkey(quadKey QuadKey, tileDetails *TileDetails, isTargetLevel bool) error {
+// GetTileDetailsForQuadkeyAndTileType returns details for the tile for quadkey
+// This will get any tiles for this quadkey but also not just at the QK level but any ancestors that are full
+func (qm *QuadMap) GetTileDetailsForQuadkeyAndTileType(quadKey QuadKey, tileType TileType, tileDetails *TileDetails, isTargetLevel bool) error {
 
 	// high as we can go... cant do any more, so return nil
 	if quadKey == 0 {
@@ -228,10 +230,12 @@ func (qm *QuadMap) GetTileDetailsForQuadkey(quadKey QuadKey, tileDetails *TileDe
 
 		// whatever groups are in tile t....  add the details to tileDetails but only if full (if we're processing parent)
 		for _, g := range t.groups {
-
-			// correct target level... so store all the tiles at this level... no?
-			if isTargetLevel || g.Full {
-				tileDetails.Groups = append(tileDetails.Groups, TileDetailsGroup{GroupDetails: GroupDetails{Full: g.Full, Type: g.Type, GroupID: g.GroupID}, QuadKey: quadKey})
+			hasTileType, isFull := g.HasTileTypeAndFull(tileType)
+			if hasTileType {
+				// correct target level... so store all the tiles at this level... no?
+				if isTargetLevel || isFull {
+					tileDetails.Groups = append(tileDetails.Groups, TileDetailsGroup{GroupDetails: g, QuadKey: quadKey})
+				}
 			}
 		}
 	}
@@ -243,12 +247,12 @@ func (qm *QuadMap) GetTileDetailsForQuadkey(quadKey QuadKey, tileDetails *TileDe
 	}
 
 	// isTargetLevel false due to we're processing an ancestor now.
-	return qm.GetTileDetailsForQuadkey(parentQuadKey, tileDetails, false)
+	return qm.GetTileDetailsForQuadkeyAndTileType(parentQuadKey, tileType, tileDetails, false)
 }
 
 // GetSlippyBoundsForGroupIDTileTypeAndZoom returns the minx,miny,maxx,maxy slippy coords for a given zoom level
 // extracted from the quadmap. Brute forcing it for now.
-func (qm *QuadMap) GetSlippyBoundsForGroupIDTileTypeAndZoom(groupID uint32, tileType TileType, zoom byte) (uint32, uint32, uint32, uint32, error) {
+func (qm *QuadMap) GetSlippyBoundsForGroupIDTileTypeAndZoom(groupID GroupID, tileType TileType, zoom byte) (uint32, uint32, uint32, uint32, error) {
 
 	var minX uint32 = math.MaxUint32
 	var minY uint32 = math.MaxUint32
@@ -268,10 +272,15 @@ func (qm *QuadMap) GetSlippyBoundsForGroupIDTileTypeAndZoom(groupID uint32, tile
 
 		// only get tiletype and groupID that we want. Also needs to be either equal zoom OR is full.
 		for _, g := range v.groups {
-			if g.GroupID == groupID && g.Type == tileType {
+			if g.GroupID() == groupID {
+				hasTileType, isFull := g.HasTileTypeAndFull(tileType)
+
+				if !hasTileType {
+					continue
+				}
 
 				// only continue if precise zoom level OR this tile is considered full.
-				if z == zoom || g.Full {
+				if z == zoom || isFull {
 					minChild, maxChild, err := quadKey.GetMinMaxEquivForZoomLevel(zoom)
 					if err != nil {
 						log.Errorf("error while generating min/max for quadkey %s", err.Error())
