@@ -92,7 +92,7 @@ func (gd GroupDetails) SetTileTypeAndFull(tileType TileType, full bool) GroupDet
 	if full {
 		gd = gd | GroupDetails(tileType)
 	} else {
-		gd = gd & GroupDetails(^tileType)
+		gd = gd & ^GroupDetails(tileType)
 	}
 
 	return gd
@@ -100,7 +100,7 @@ func (gd GroupDetails) SetTileTypeAndFull(tileType TileType, full bool) GroupDet
 
 func NewGroupDetails(gid GroupID, tt TileType, full bool) GroupDetails {
 	gd := GroupDetails(uint64(gid) << 32)
-	gd.SetTileTypeAndFull(tt, full)
+	gd = gd.SetTileTypeAndFull(tt, full)
 	return gd
 }
 
