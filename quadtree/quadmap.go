@@ -13,7 +13,7 @@ import (
 // TileDetailsGroup is used when returning query results and NOT
 // actually part of the quadmap itself.
 type TileDetailsGroup struct {
-	GroupDetails
+	GroupTileTypeDetails
 	QuadKey QuadKey
 }
 
@@ -238,7 +238,7 @@ func (qm *QuadMap) GetTileDetailsForQuadkeyAndTileType(quadKey QuadKey, tileType
 			if hasTileType {
 				// correct target level... so store all the tiles at this level... no?
 				if isTargetLevel || isFull {
-					tileDetails.Groups = append(tileDetails.Groups, TileDetailsGroup{GroupDetails: g, QuadKey: quadKey})
+					tileDetails.Groups = append(tileDetails.Groups, TileDetailsGroup{GroupTileTypeDetails: g, QuadKey: quadKey})
 				}
 			}
 		}

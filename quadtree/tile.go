@@ -6,7 +6,6 @@ type TileType uint16
 type GroupID uint32
 
 const (
-	TileTypeNone      TileType = 0b000000000
 	TileTypeVert      TileType = 0b000000000001
 	TileTypeEast      TileType = 0b000000000010
 	TileTypeNorth     TileType = 0b000000000100
@@ -17,7 +16,7 @@ const (
 	TileTypeNIR       TileType = 0b0010000000
 )
 
-// GroupDetails has bare information about the "group" that created the tile this is associated with.
+// GroupTileTypeDetails has bare information about the "group" that created the tile this is associated with.
 // The first 32 bits is a unique identifier for the group
 // The next 32 bits are a combination of tiletype (can be maximum of 16) and a full flag.
 // eg.
@@ -30,15 +29,15 @@ const (
 //		|                     |00000000000000100000000000000000|
 //      Has Type of East, but is not full.
 
-type GroupDetails uint64
+type GroupTileTypeDetails uint64
 
-func (gd GroupDetails) GroupID() GroupID {
+func (gd GroupTileTypeDetails) GroupID() GroupID {
 	return GroupID(gd >> 32)
 }
 
-// HasTileTypeAndFull returns if tiletype is set for the GroupDetails and if
+// HasTileTypeAndFull returns if tiletype is set for the GroupTileTypeDetails and if
 // the tile is full.
-func (gd GroupDetails) HasTileTypeAndFull(tileType TileType) (bool, bool) {
+func (gd GroupTileTypeDetails) HasTileTypeAndFull(tileType TileType) (bool, bool) {
 	tt := uint32(gd >> 32)
 	hasTileType := uint16(tt>>16)&uint16(tileType) == 1
 	isFull := false
@@ -50,7 +49,7 @@ func (gd GroupDetails) HasTileTypeAndFull(tileType TileType) (bool, bool) {
 	return hasTileType, isFull
 }
 
-func (gd GroupDetails) ReturnTileTypes() []TileType {
+func (gd GroupTileTypeDetails) ReturnTileTypes() []TileType {
 	var tileTypes []TileType
 	if gd.HasTileType(TileTypeVert) {
 		tileTypes = append(tileTypes, TileTypeVert)
@@ -80,27 +79,40 @@ func (gd GroupDetails) ReturnTileTypes() []TileType {
 	return tileTypes
 }
 
-func (gd GroupDetails) HasTileType(tileType TileType) bool {
+func (gd GroupTileTypeDetails) HasTileType(tileType TileType) bool {
 	tt := uint32(gd)
 	hasTileType := uint16(tt>>16)&uint16(tileType) == 1
 	return hasTileType
 }
 
-func (gd GroupDetails) SetTileTypeAndFull(tileType TileType, full bool) GroupDetails {
+func (gd GroupTileTypeDetails) SetTileTypeAndFull(tileType TileType, full bool) GroupTileTypeDetails {
 
-	gd = gd | GroupDetails(uint32(tileType)<<16)
+	gd = gd | GroupTileTypeDetails(uint32(tileType)<<16)
 	if full {
-		gd = gd | GroupDetails(tileType)
+		gd = gd | GroupTileTypeDetails(tileType)
 	} else {
-		gd = gd & ^GroupDetails(tileType)
+		gd = gd & ^GroupTileTypeDetails(tileType)
 	}
 
 	return gd
 }
 
-func NewGroupDetails(gid GroupID, tt TileType, full bool) GroupDetails {
-	gd := GroupDetails(uint64(gid) << 32)
+func NewGroupTileTypeDetails(gid GroupID, tt TileType, full bool) GroupTileTypeDetails {
+	gd := GroupTileTypeDetails(uint64(gid) << 32)
 	gd = gd.SetTileTypeAndFull(tt, full)
+	return gd
+}
+
+// GroupDetails has the GroupTileTypeDetails (which has the groupID and tiletype/full flag)
+// As well as a pointer to the raw data used for on-demand population
+type GroupDetails struct {
+	Details GroupTileTypeDetails
+	Data    *[]byte
+}
+
+func NewGroupDetails(gid GroupID, tt TileType, full bool) GroupDetails {
+	gd := GroupDetails{}
+	gd.Details = NewGroupTileTypeDetails(gid, tt, full)
 	return gd
 }
 
@@ -112,18 +124,10 @@ func NewGroupDetails(gid GroupID, tt TileType, full bool) GroupDetails {
 // For example, if we populate the quadmap with one set of data (called group1) and group1
 // in turn has information about tiletype1 and tiletype2, this means that we'll need to track at a per quadkey
 // level if the files are full (and for which tiletypes).
-// Once the caller then populates with a completely different group, then we'll need to store that information
-// as well (in the same tile). This means that we'll need to store a map of groupID -> GroupDetails.
-//
-// We *could* skip all this if we wanted a separate quadmap per group, but given we need to search all groups
-// at once, this would be incredibly inefficient
 type Tile struct {
-	// stupid to keep it in here?
-	// Will also store the zoom level in the key.
 	QuadKey QuadKey
 
 	// groups that have information for this tile. The IDs listed here can be used elsewhere to look up data.
-	// Not convinced that the groupdata *has* to be stored actually IN the tree.
 	groups []GroupDetails
 }
 
@@ -160,7 +164,7 @@ func (t *Tile) SetTileType(groupID GroupID, tt TileType) error {
 func (t *Tile) HasTileType(groupID GroupID, tt TileType) bool {
 
 	for _, g := range t.groups {
-		if g.GroupID() == groupID && g.HasTileType(tt) {
+		if g.Details.GroupID() == groupID && g.Details.HasTileType(tt) {
 			return true
 		}
 	}
@@ -178,12 +182,12 @@ func (t *Tile) SetFullForGroupIDAndTileType(groupID GroupID, tileType TileType, 
 
 	// loop through groups... see if already have groupid + type match.
 	for i, g := range t.groups {
-		ggId := g.GroupID()
-		if ggId == groupID && g.HasTileType(tileType) {
+		ggId := g.Details.GroupID()
+		if ggId == groupID && g.Details.HasTileType(tileType) {
 
-			updatedGroupDetails := g.SetTileTypeAndFull(tileType, full)
+			updatedGroupDetails := g.Details.SetTileTypeAndFull(tileType, full)
 			// remove original, add new.
-			t.groups[i] = updatedGroupDetails
+			t.groups[i].Details = updatedGroupDetails
 
 			return nil
 		}
@@ -199,8 +203,8 @@ func (t *Tile) SetFullForGroupIDAndTileType(groupID GroupID, tileType TileType, 
 func (t *Tile) GetFullForGroupIDAndTileType(groupID GroupID, tileType TileType) bool {
 
 	for _, g := range t.groups {
-		if g.GroupID() == groupID {
-			hasTileType, isFull := g.HasTileTypeAndFull(tileType)
+		if g.Details.GroupID() == groupID {
+			hasTileType, isFull := g.Details.HasTileTypeAndFull(tileType)
 			if hasTileType {
 				return isFull
 			}
