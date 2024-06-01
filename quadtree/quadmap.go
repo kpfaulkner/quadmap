@@ -136,12 +136,15 @@ func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z uint32, groupI
 
 	// check if child exists.
 	if child, ok := qm.quadKeyMap[quadKey]; ok {
-		child.SetTileType(groupID, tileType)
+		err := child.SetFullForGroupIDAndTileType(groupID, tileType, false)
+		if err != nil {
+			return nil, err
+		}
 		return child, nil
 	}
 
 	t := NewTileWithQuadKey(quadKey)
-	t.SetTileType(groupID, tileType)
+	t.SetFullForGroupIDAndTileType(groupID, tileType, false)
 	qm.quadKeyMap[t.QuadKey] = t
 	return t, nil
 }
@@ -317,11 +320,15 @@ func (qm *QuadMap) PrintStats() {
 	fmt.Printf("Number of tiles %d\n", qm.NumberOfTiles())
 
 	groupDetailSizes := make(map[int]int)
-	for _, v := range qm.quadKeyMap {
+	quadKeyScaleDetails := make(map[byte]int)
+	for k, v := range qm.quadKeyMap {
 		groupSize := len(v.groups)
 
-		if groupSize == 2 {
-			fmt.Printf("snoop\n")
+		z := k.Zoom()
+		if _, ok := quadKeyScaleDetails[z]; !ok {
+			quadKeyScaleDetails[z] = 1
+		} else {
+			quadKeyScaleDetails[z]++
 		}
 
 		if _, ok := groupDetailSizes[groupSize]; !ok {
@@ -336,6 +343,10 @@ func (qm *QuadMap) PrintStats() {
 	for k, v := range groupDetailSizes {
 		fmt.Printf("Group size %d : count %d\n", k, v)
 		total += v
+	}
+
+	for k, v := range quadKeyScaleDetails {
+		fmt.Printf("qk scale %d : count %d\n", k, v)
 	}
 
 	fmt.Printf("total groups recorded is %d\n", total)

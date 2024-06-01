@@ -81,7 +81,7 @@ func (gd GroupDetails) ReturnTileTypes() []TileType {
 }
 
 func (gd GroupDetails) HasTileType(tileType TileType) bool {
-	tt := uint32(gd >> 32)
+	tt := uint32(gd)
 	hasTileType := uint16(tt>>16)&uint16(tileType) == 1
 	return hasTileType
 }
@@ -133,18 +133,12 @@ func NewTile(x uint32, y uint32, z byte) *Tile {
 	t := &Tile{}
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
 	t.QuadKey = quadKey
-	if quadKey == 3673454728244625429 {
-		fmt.Printf("look\n")
-	}
 	return t
 }
 
 func NewTileWithQuadKey(quadKey QuadKey) *Tile {
 	t := &Tile{}
 	t.QuadKey = quadKey
-	if quadKey == 3673454728244625429 {
-		fmt.Printf("look\n")
-	}
 	return t
 }
 
@@ -196,6 +190,7 @@ func (t *Tile) SetFullForGroupIDAndTileType(groupID GroupID, tileType TileType, 
 	}
 
 	gd := NewGroupDetails(groupID, tileType, full)
+
 	t.groups = append(t.groups, gd)
 	return nil
 }
