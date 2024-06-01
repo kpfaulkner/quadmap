@@ -140,7 +140,7 @@ func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z uint32, groupI
 		return child, nil
 	}
 
-	t := &Tile{QuadKey: quadKey}
+	t := NewTileWithQuadKey(quadKey)
 	t.SetTileType(groupID, tileType)
 	qm.quadKeyMap[t.QuadKey] = t
 	return t, nil
@@ -150,7 +150,8 @@ func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z uint32, groupI
 // Populates tile type and full flags based off parent.
 // FIXME(kpfaulkner) confirm can delete
 func createChildForPos(childQuadKey QuadKey, pos int) (*Tile, error) {
-	child := &Tile{QuadKey: childQuadKey}
+	//child := &Tile{QuadKey: childQuadKey}
+	child := NewTileWithQuadKey(childQuadKey)
 	return child, nil
 }
 
@@ -310,4 +311,35 @@ func (qm *QuadMap) GetSlippyBoundsForGroupIDTileTypeAndZoom(groupID GroupID, til
 	}
 
 	return minX, minY, maxX, maxY, nil
+}
+
+func (qm *QuadMap) PrintStats() {
+	fmt.Printf("Number of tiles %d\n", qm.NumberOfTiles())
+
+	groupDetailSizes := make(map[int]int)
+	for _, v := range qm.quadKeyMap {
+		groupSize := len(v.groups)
+
+		if groupSize == 2 {
+			fmt.Printf("snoop\n")
+		}
+
+		if _, ok := groupDetailSizes[groupSize]; !ok {
+			groupDetailSizes[groupSize] = 1
+		} else {
+			groupDetailSizes[groupSize] += groupSize
+		}
+
+	}
+
+	total := 0
+	for k, v := range groupDetailSizes {
+		fmt.Printf("Group size %d : count %d\n", k, v)
+		total += v
+	}
+
+	fmt.Printf("total groups recorded is %d\n", total)
+
+	fmt.Printf("total number of uint64s stored (QKs + group details) %d\n", total+qm.NumberOfTiles())
+
 }

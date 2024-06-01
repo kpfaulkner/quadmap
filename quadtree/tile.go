@@ -133,6 +133,18 @@ func NewTile(x uint32, y uint32, z byte) *Tile {
 	t := &Tile{}
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
 	t.QuadKey = quadKey
+	if quadKey == 3673454728244625429 {
+		fmt.Printf("look\n")
+	}
+	return t
+}
+
+func NewTileWithQuadKey(quadKey QuadKey) *Tile {
+	t := &Tile{}
+	t.QuadKey = quadKey
+	if quadKey == 3673454728244625429 {
+		fmt.Printf("look\n")
+	}
 	return t
 }
 
@@ -171,9 +183,14 @@ func (t *Tile) GetTileZoomLevel() byte {
 func (t *Tile) SetFullForGroupIDAndTileType(groupID GroupID, tileType TileType, full bool) error {
 
 	// loop through groups... see if already have groupid + type match.
-	for _, g := range t.groups {
-		if g.GroupID() == groupID && g.HasTileType(tileType) {
-			g.SetTileTypeAndFull(tileType, full)
+	for i, g := range t.groups {
+		ggId := g.GroupID()
+		if ggId == groupID && g.HasTileType(tileType) {
+
+			updatedGroupDetails := g.SetTileTypeAndFull(tileType, full)
+			// remove original, add new.
+			t.groups[i] = updatedGroupDetails
+
 			return nil
 		}
 	}
