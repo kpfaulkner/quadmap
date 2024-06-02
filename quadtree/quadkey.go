@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 
 	"github.com/peterstace/simplefeatures/geom"
 )
@@ -171,4 +172,22 @@ func (q QuadKey) GetMinMaxEquivForZoomLevel(zoom byte) (QuadKey, QuadKey, error)
 		maxChild, _ = maxChild.ChildAtPos(3)
 	}
 	return minChild, maxChild, nil
+}
+
+// GetAllAncestorsAndSelf returns all ancestors of given QuadKey
+// including the QuadKey itself
+func (q QuadKey) GetAllAncestorsAndSelf() []QuadKey {
+	var ancestors = []QuadKey{q}
+	for {
+		parent, err := q.Parent()
+		if err != nil {
+			break
+		}
+		ancestors = append(ancestors, parent)
+		q = parent
+	}
+
+	// reverse list so that it's in order of zoom level.
+	slices.Reverse(ancestors)
+	return ancestors
 }
