@@ -47,6 +47,12 @@ func NewQuadMap(initialCapacity int) *QuadMap {
 	}
 }
 
+// SetDataReader sets the data reader for the quadmap
+// Ideally would like it to be as part of NewQuadMap but need to pass in the quadmap...  so catch 22
+func (qm *QuadMap) SetDataReader(dr DataReader) {
+	qm.dataReader = dr
+}
+
 // GetParentTile returns parent tile of passed in tile t
 func (qm *QuadMap) GetParentTile(t *Tile) (*Tile, error) {
 	parentKey, err := t.QuadKey.Parent()
