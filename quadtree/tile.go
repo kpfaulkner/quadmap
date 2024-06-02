@@ -103,23 +103,30 @@ func NewGroupTileTypeDetails(gid GroupID, tt TileType, full bool) GroupTileTypeD
 	return gd
 }
 
+type RawData struct {
+	Data        *[]byte
+	IsWatermark bool
+}
+
 // GroupDetails has the GroupTileTypeDetails (which has the groupID and tiletype/full flag)
 // As well as a pointer to the raw data used for on-demand population
 type GroupDetails struct {
 	Details GroupTileTypeDetails
 
+	Data map[TileType]RawData
 	// Data is the raw data used to store the Quadmap data.
-	Data *[]byte
+	//Data *[]byte
 
 	// IsWatermark indicates that this group is the last that is populated within the Quadmap.
 	// There may be further entries available at lower scale levels, but they have NOT been read
 	// from the Data and populated into the Quadmap.
-	IsWatermark bool
+	//IsWatermark bool
 }
 
 func NewGroupDetails(gid GroupID, tt TileType, full bool) GroupDetails {
 	gd := GroupDetails{}
 	gd.Details = NewGroupTileTypeDetails(gid, tt, full)
+	gd.Data = make(map[TileType]RawData)
 	return gd
 }
 

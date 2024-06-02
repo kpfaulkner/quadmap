@@ -27,7 +27,7 @@ type TileDetails struct {
 // DataReader function is provided by the consumer of the Quadmap.
 // This will read a byte slice and scale and populate the Quadmap with
 // the appropriate deserialised data.
-type DataReader func(qm *QuadMap, data *[]byte, scale byte) error
+type DataReader func(qm *QuadMap, data *[]byte, groupID GroupID, tileType TileType, scale byte) error
 
 // QuadMap is a quadtree in disguise...
 type QuadMap struct {
@@ -348,23 +348,23 @@ func (qm *QuadMap) GetTileDetailsForQuadkeyAndTileTypeTopDown(quadKey QuadKey, t
 				for _, tileType := range tileTypes {
 					hasTileType, isFull := g.Details.HasTileTypeAndFull(tileType)
 					if hasTileType {
-						// if we have a match for at least one of the tiletypes, then add to the tileDetails.Groups slice.
-						// only interested if the quadkey IF we're either at a full ancestor OR we're at the target scale
-						// or the originally queried quadkey.
+
 						if isFull || qk.Zoom() == targetScale {
 							tileDetails.Groups = append(tileDetails.Groups, TileDetailsGroup{GroupTileTypeDetails: g.Details, QuadKey: qk})
-							break
+							continue
 						}
 					}
 
 					// If at watermark, then need to populate the quadmap to further scale depths and
 					// reset the IsWatermark to a different depth.
-					if g.IsWatermark {
+					if g.Data[tileType].IsWatermark {
 						// reset IsWaterMark...
-						qm.quadKeyMap[qk].groups[i].IsWatermark = false
+						data := t.groups[i].Data[tileType]
+						data.IsWatermark = false
+						t.groups[i].Data[tileType] = data
 
 						// populate the quadmap down to targetScale (so dont have to populate all scale/zoom levels)
-						err := qm.dataReader(qm, g.Data, targetScale)
+						err := qm.dataReader(qm, g.Data[tileType].Data, g.Details.GroupID(), tileType, targetScale)
 						if err != nil {
 							return err
 						}
