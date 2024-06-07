@@ -283,7 +283,6 @@ func (qm *QuadMap) GetTileDetailsForQuadkeyAndTileTypeTopDown(quadKey QuadKey, t
 
 	targetScale := quadKey.Zoom()
 	for _, qk := range allAncestors {
-		x, y, z := qk.SlippyCoords()
 
 		qm.lock.RLock()
 		t, ok := qm.quadKeyMap[qk]
