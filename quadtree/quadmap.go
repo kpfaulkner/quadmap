@@ -27,7 +27,8 @@ type TileDetails struct {
 // DataReader function is provided by the consumer of the Quadmap.
 // This will read a byte slice and scale and populate the Quadmap with
 // the appropriate deserialised data.
-type DataReader func(qm *QuadMap, data *[]byte, groupID GroupID, tileType TileType, scale byte) error
+// Will read as far as expandToLevel value (exclusive)
+type DataReader func(qm *QuadMap, data *[]byte, groupID GroupID, tileType TileType, expandToLevel byte) error
 
 // QuadMap is a quadtree in disguise...
 type QuadMap struct {
@@ -142,7 +143,7 @@ func (qm *QuadMap) AddTile(t *Tile) error {
 // CreateTileAtSlippyCoords creates a tile to the quadmap at slippy coords
 // If tile already exists at coords, then tile is modified with groupID/tiletype information
 // Tile is returned
-func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z uint32, groupID GroupID, tileType TileType) (*Tile, error) {
+func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z uint32, groupID GroupID, tileType TileType, rawData *[]byte) (*Tile, error) {
 
 	// x,y,z are already child coords...  so no need to take pos into account
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, byte(z))
@@ -158,6 +159,7 @@ func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z uint32, groupI
 
 	t := NewTileWithQuadKey(quadKey)
 	t.SetFullForGroupIDAndTileType(groupID, tileType, false)
+	t.SetRawDataGroupIDAndTileType(groupID, tileType, rawData)
 	qm.quadKeyMap[t.QuadKey] = t
 	return t, nil
 }
@@ -336,12 +338,17 @@ func (qm *QuadMap) GetTileDetailsForSlippyCoordsAndTileTypeTopDown(x uint32, y u
 // GetTileDetailsForQuadkeyAndTileTypeTopDown returns details for the tile for quadkey
 // This starts at the highest quadkey possible and works its way down. This will allow dynamic populating of the quadmap
 // if required.
+// TODO(kpfaulkner) check if we should only be considering full or target tiles?
+// The more I think about it I think we should just return if there's a QK match at all.
 func (qm *QuadMap) GetTileDetailsForQuadkeyAndTileTypeTopDown(quadKey QuadKey, tileTypes []TileType, tileDetails *TileDetails) error {
 
 	allAncestors := quadKey.GetAllAncestorsAndSelf()
 
 	targetScale := quadKey.Zoom()
 	for _, qk := range allAncestors {
+		x, y, z := qk.SlippyCoords()
+		fmt.Printf("X %d Y %d Z %d\n", x, y, z)
+
 		if t, ok := qm.quadKeyMap[qk]; ok {
 			// whatever groups are in tile t....  add the details to tileDetails but only if full (if we're processing parent)
 			for i, g := range t.groups {
@@ -353,6 +360,7 @@ func (qm *QuadMap) GetTileDetailsForQuadkeyAndTileTypeTopDown(quadKey QuadKey, t
 							tileDetails.Groups = append(tileDetails.Groups, TileDetailsGroup{GroupTileTypeDetails: g.Details, QuadKey: qk})
 							continue
 						}
+						//tileDetails.Groups = append(tileDetails.Groups, TileDetailsGroup{GroupTileTypeDetails: g.Details, QuadKey: qk})
 					}
 
 					// If at watermark, then need to populate the quadmap to further scale depths and
@@ -448,7 +456,29 @@ func (qm *QuadMap) PrintStats() {
 	for k, v := range qm.quadKeyMap {
 		groupSize := len(v.groups)
 
-		z := k.Zoom()
+		x, y, z := k.SlippyCoords()
+		fmt.Printf("X %d Y %d Z %d\n", x, y, z)
+
+		if z == 16 {
+			qks := k.GetAllAncestorsAndSelf()
+			for _, qk := range qks {
+				tt, _ := qm.GetExactTileForQuadKey(qk)
+				xxx, yyy, zzz := qk.SlippyCoords()
+				if xxx == 4322 && yyy == 6419 && zzz == 13 {
+					fmt.Printf("snoop\n")
+				}
+				fmt.Printf("XX YY ZZ is X %d , Y %d, Z %d\n", xxx, yyy, zzz)
+				if tt.groups[0].Data[TileTypeVert].IsWatermark {
+					//fmt.Printf("X:%d Y:%d Z:%d is watermark\n", x, y, z)
+
+					parent, _ := qk.Parent()
+					parent2, _ := parent.Parent()
+					xx, yy, zz := parent2.SlippyCoords()
+					fmt.Printf("grandparent of watermark is X %d , Y %d, Z %d\n", xx, yy, zz)
+				}
+			}
+		}
+		//z := k.Zoom()
 		if _, ok := quadKeyScaleDetails[z]; !ok {
 			quadKeyScaleDetails[z] = 1
 		} else {
@@ -459,6 +489,11 @@ func (qm *QuadMap) PrintStats() {
 			groupDetailSizes[groupSize] = 1
 		} else {
 			groupDetailSizes[groupSize] += groupSize
+		}
+
+		// only 1 group and only vert..
+		if v.groups[0].Data[TileTypeVert].IsWatermark {
+			fmt.Printf("X:%d Y:%d Z:%d is watermark\n", x, y, z)
 		}
 
 	}

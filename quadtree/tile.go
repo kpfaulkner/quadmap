@@ -38,11 +38,11 @@ func (gd GroupTileTypeDetails) GroupID() GroupID {
 // HasTileTypeAndFull returns if tiletype is set for the GroupTileTypeDetails and if
 // the tile is full.
 func (gd GroupTileTypeDetails) HasTileTypeAndFull(tileType TileType) (bool, bool) {
-	tt := uint32(gd >> 32)
-	hasTileType := uint16(tt>>16)&uint16(tileType) == 1
+	tt := uint32(gd >> 16)
+	hasTileType := uint16(tt)&uint16(tileType) == 1
 	isFull := false
 	if hasTileType {
-		if uint16(tt)&uint16(tileType) == 1 {
+		if uint16(gd)&uint16(tileType) == 1 {
 			isFull = true
 		}
 	}
@@ -160,6 +160,39 @@ func NewTileWithQuadKey(quadKey QuadKey) *Tile {
 	return t
 }
 
+func (t *Tile) SetWatermarkForGroupIDAndTileType(groupID GroupID, tt TileType) error {
+	for i, g := range t.groups {
+		if g.Details.GroupID() == groupID && g.Details.HasTileType(tt) {
+			data := t.groups[i].Data[tt]
+			data.IsWatermark = true
+			t.groups[i].Data[tt] = data
+			fmt.Printf("Set watermark for QK %d : %v %v\n", t.QuadKey, groupID, tt)
+		}
+	}
+	return nil
+}
+
+func (t *Tile) ClearWatermarkForGroupIDAndTileType(groupID GroupID, tt TileType) error {
+	for i, g := range t.groups {
+		if g.Details.GroupID() == groupID && g.Details.HasTileType(tt) {
+			data := t.groups[i].Data[tt]
+			data.IsWatermark = false
+			t.groups[i].Data[tt] = data
+			fmt.Printf("Clear watermark for QK %d : %v %v\n", t.QuadKey, groupID, tt)
+		}
+	}
+	return nil
+}
+
+func (t *Tile) GetWatermarkForGroupIDAndTileType(groupID GroupID, tt TileType) bool {
+	for i, g := range t.groups {
+		if g.Details.GroupID() == groupID && g.Details.HasTileType(tt) {
+			return t.groups[i].Data[tt].IsWatermark
+		}
+	}
+	return false
+}
+
 // SetTileType for a given groupID and tiletype.
 // Checks if groupID + tiletype combination already exists. Returns error if so.
 func (t *Tile) SetTileType(groupID GroupID, tt TileType) error {
@@ -192,6 +225,7 @@ func (t *Tile) GetTileZoomLevel() byte {
 
 // SetFullForGroupIDAndTileType sets the full flag for a given tile type.
 // Only creates Full map at this stage (saves us creating a potential mass of unused maps)
+// If is full then by definition we're at the watermark?
 func (t *Tile) SetFullForGroupIDAndTileType(groupID GroupID, tileType TileType, full bool) error {
 
 	// loop through groups... see if already have groupid + type match.
@@ -202,14 +236,34 @@ func (t *Tile) SetFullForGroupIDAndTileType(groupID GroupID, tileType TileType, 
 			updatedGroupDetails := g.Details.SetTileTypeAndFull(tileType, full)
 			// remove original, add new.
 			t.groups[i].Details = updatedGroupDetails
-
+			//t.groups[i].Data[tileType] = RawData{Data: t.groups[i].Data[tileType].Data, IsWatermark: true}
+			//t.SetWatermarkForGroupIDAndTileType(groupID, tileType)
 			return nil
 		}
 	}
 
 	gd := NewGroupDetails(groupID, tileType, full)
-
 	t.groups = append(t.groups, gd)
+	t.SetWatermarkForGroupIDAndTileType(groupID, tileType)
+	return nil
+}
+
+func (t *Tile) SetRawDataGroupIDAndTileType(groupID GroupID, tileType TileType, rawData *[]byte) error {
+
+	// loop through groups... see if already have groupid + type match.
+	for i, g := range t.groups {
+		ggId := g.Details.GroupID()
+		if ggId == groupID && g.Details.HasTileType(tileType) {
+
+			data := g.Data[tileType]
+			data.Data = rawData
+
+			// add pointer to raw data for this tile.
+			t.groups[i].Data[tileType] = data
+
+			return nil
+		}
+	}
 	return nil
 }
 
