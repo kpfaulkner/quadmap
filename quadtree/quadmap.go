@@ -307,27 +307,11 @@ func (qm *QuadMap) GetTileDetailsForQuadkeyAndTileTypeTopDown(quadKey QuadKey, t
 						// reset IsWaterMark...
 
 						t.ClearWatermarkForGroupIDAndTileType(g.Details.GroupID(), tileType)
-
-						fmt.Printf("quadmap size %d\n", len(qm.quadKeyMap))
-						if g.Data[tileType].Data == nil {
-							fmt.Printf("coord %d %d %d has no data: groupid %d\n", x, y, z, g.Details.GroupID())
-
-							qks := qk.GetAllAncestorsAndSelf()
-							for _, qk := range qks {
-								t := qm.quadKeyMap[qk]
-								gd := t.GetGroupDetailsByGroupIDAndTileType(g.Details.GroupID(), tileType)
-								if gd != nil {
-									fmt.Printf("group details %+v\n", *gd)
-								}
-							}
-
-						}
 						// populate the quadmap down to targetScale (so dont have to populate all scale/zoom levels)
 						err := qm.dataReader(qm, g.Data[tileType].Data, g.Details.GroupID(), tileType, targetScale)
 						if err != nil {
 							return err
 						}
-						fmt.Printf("quadmap size after update %d\n", len(qm.quadKeyMap))
 					}
 				}
 			}
