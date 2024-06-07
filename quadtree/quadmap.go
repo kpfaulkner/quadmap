@@ -5,6 +5,7 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"math"
+	"sync"
 )
 
 // TileDetailsGroup is same as TileDetails but we also want
@@ -22,6 +23,19 @@ type TileDetailsGroup struct {
 // actually part of the quadmap itself.
 type TileDetails struct {
 	Groups []TileDetailsGroup
+	lock   sync.RWMutex
+}
+
+func (td *TileDetails) AddTileDetailsGroup(tdg TileDetailsGroup) {
+	td.lock.Lock()
+	defer td.lock.Unlock()
+	td.Groups = append(td.Groups, tdg)
+}
+
+func (td *TileDetails) GetTileDetailsGroups() []TileDetailsGroup {
+	td.lock.RLock()
+	defer td.lock.RUnlock()
+	return td.Groups
 }
 
 // DataReader function is provided by the consumer of the Quadmap.
@@ -38,6 +52,8 @@ type QuadMap struct {
 
 	// function able to take byte slices and populate Quadmap.
 	dataReader DataReader
+
+	lock sync.RWMutex
 }
 
 // NewQuadMap create a new quadmap
@@ -60,7 +76,11 @@ func (qm *QuadMap) GetParentTile(t *Tile) (*Tile, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	qm.lock.RLock()
 	parentTile, ok := qm.quadKeyMap[parentKey]
+	qm.lock.RUnlock()
+
 	if !ok {
 		return nil, errors.New("parent tile not found")
 	}
@@ -74,7 +94,10 @@ func (qm *QuadMap) GetChildInPos(t *Tile, pos int) (*Tile, error) {
 	if err != nil {
 		return nil, err
 	}
+	qm.lock.RLock()
 	childTile, ok := qm.quadKeyMap[childKey]
+	qm.lock.RUnlock()
+
 	if !ok {
 		return nil, errors.New(fmt.Sprintf("child tile in pos %d not found", pos))
 	}
@@ -89,6 +112,9 @@ func (qm *QuadMap) GetExactTileForSlippy(x uint32, y uint32, z byte) (*Tile, err
 
 // GetExactTileForQuadKey returns tile for quadkey match. Does NOT traverse up the ancestry
 func (qm *QuadMap) GetExactTileForQuadKey(quadKey QuadKey) (*Tile, error) {
+
+	qm.lock.RLock()
+	defer qm.lock.RUnlock()
 
 	// if actual quadkey exists, return tile.
 	if t, ok := qm.quadKeyMap[quadKey]; ok {
@@ -117,6 +143,8 @@ func (qm *QuadMap) NumberOfTilesForZoom(zoom byte) int {
 func (qm *QuadMap) GetTilesForTypeAndZoom(tt TileType, zoom byte) []*Tile {
 	tiles := []*Tile{}
 
+	qm.lock.RLock()
+	defer qm.lock.RUnlock()
 	for _, t := range qm.quadKeyMap {
 		if t.QuadKey.Zoom() == zoom {
 			for _, g := range t.groups {
@@ -136,6 +164,8 @@ func (qm *QuadMap) NumberOfTiles() int {
 
 // AddTile adds a pre-generated tile (which has its quadkey already)
 func (qm *QuadMap) AddTile(t *Tile) error {
+	qm.lock.Lock()
+	defer qm.lock.Unlock()
 	qm.quadKeyMap[t.QuadKey] = t
 	return nil
 }
@@ -148,22 +178,21 @@ func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z uint32, groupI
 	// x,y,z are already child coords...  so no need to take pos into account
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, byte(z))
 
+	qm.lock.Lock()
+	defer qm.lock.Unlock()
 	// check if child exists.
-	if child, ok := qm.quadKeyMap[quadKey]; ok {
-		err := child.SetFullForGroupIDAndTileType(groupID, tileType, false)
+	if tile, ok := qm.quadKeyMap[quadKey]; ok {
+		err := tile.SetFullForGroupIDAndTileType(groupID, tileType, false)
 		if err != nil {
 			return nil, err
 		}
-		return child, nil
+		return tile, nil
 	}
 
 	t := NewTileWithQuadKey(quadKey)
 	t.SetFullForGroupIDAndTileType(groupID, tileType, false)
 	t.SetRawDataGroupIDAndTileType(groupID, tileType, rawData)
 
-	if rawData == nil {
-		fmt.Printf("XXXXXXX nil data\n")
-	}
 	qm.quadKeyMap[t.QuadKey] = t
 	return t, nil
 }
@@ -203,6 +232,8 @@ func (qm *QuadMap) HaveTileForSlippyGroupIDAndTileType(x uint32, y uint32, z byt
 //     Returns tile (actual or parent), bool indicating if actual (true == actual, false == ancestor) and error
 func (qm *QuadMap) HaveTileForGroupIDAndTileType(quadKey QuadKey, groupID GroupID, tileType TileType, actualTile bool) (bool, error) {
 
+	qm.lock.RLock()
+
 	// if actual quadkey exists, check tiletype and groupID
 	if t, ok := qm.quadKeyMap[quadKey]; ok {
 		for _, g := range t.groups {
@@ -210,12 +241,14 @@ func (qm *QuadMap) HaveTileForGroupIDAndTileType(quadKey QuadKey, groupID GroupI
 				hasTileType, isFull := g.Details.HasTileTypeAndFull(tileType)
 				if hasTileType {
 					if isFull || actualTile {
+						qm.lock.RUnlock()
 						return true, nil
 					}
 				}
 			}
 		}
 	}
+	qm.lock.RUnlock()
 
 	parentQuadKey, err := quadKey.Parent()
 	if err != nil {
@@ -231,108 +264,6 @@ func (qm *QuadMap) HaveTileForGroupIDAndTileType(quadKey QuadKey, groupID GroupI
 	// return whether found or not
 	return found, nil
 }
-
-//// HaveTileForGroupIDAndTileTypeTopDown searches for quadkey match but starts checking at the upper most scale and works its way down.
-//// This is less efficient IF we happen to have the exact tile at that level, but searching top -> down will allow dynamic loading
-//// of the quadmap once we hit watermarks. Worth experimenting with.
-//func (qm *QuadMap) HaveTileForGroupIDAndTileTypeTopDown(quadKey QuadKey, groupID GroupID, tileType TileType) (bool, error) {
-//
-//	// all ancestors AND self.
-//	allAncestors := quadKey.GetAllAncestorsAndSelf()
-//
-//	for _, qk := range allAncestors {
-//		if tile, ok := qm.quadKeyMap[qk]; ok {
-//			for _, g := range tile.groups {
-//				if g.Details.GroupID() == groupID {
-//					hasTileType, isFull := g.Details.HasTileTypeAndFull(tileType)
-//					if hasTileType && isFull {
-//						return true, nil
-//					}
-//
-//					// If at watermark, then need to populate the quadmap to further scale depths and
-//					// reset the IsWatermark to a different depth.
-//					if g.IsWatermark {
-//						qm.dataReader(g.Data)
-//					}
-//				}
-//			}
-//		}
-//	}
-//
-//	// if actual quadkey exists, check tiletype and groupID
-//	if t, ok := qm.quadKeyMap[quadKey]; ok {
-//		for _, g := range t.groups {
-//			if g.Details.GroupID() == groupID {
-//				hasTileType, isFull := g.Details.HasTileTypeAndFull(tileType)
-//				if hasTileType {
-//					if isFull || actualTile {
-//						return true, nil
-//					}
-//				}
-//			}
-//		}
-//	}
-//
-//	parentQuadKey, err := quadKey.Parent()
-//	if err != nil {
-//		return false, err
-//	}
-//
-//	// check parents and upwards. actualTile is false since we're querying ancestors
-//	found, err := qm.HaveTileForGroupIDAndTileType(parentQuadKey, groupID, tileType, false)
-//	if err != nil {
-//		return false, err
-//	}
-//
-//	// return whether found or not
-//	return found, nil
-//}
-
-// GetTileDetailsForSlippyCoords returns details for the tile at slippy coord x,y,z.
-// This may involve multiple groups (ie multiple data sets loaded into single quadmap) but
-// also different tiletypes as well.
-//func (qm *QuadMap) GetTileDetailsForSlippyCoordsAndTileType(x uint32, y uint32, z byte, tileType TileType, tileDetails *TileDetails) error {
-//	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
-//	return qm.GetTileDetailsForQuadkeyAndTileType(quadKey, []TileType{tileType}, tileDetails, true)
-//}
-
-// GetTileDetailsForQuadkeyAndTileType returns details for the tile for quadkey
-// This will get any tiles for this quadkey but also not just at the QK level but any ancestors that are full
-// Need to check multiple TileTypes since the original query might be searching for multiple.
-//func (qm *QuadMap) GetTileDetailsForQuadkeyAndTileType(quadKey QuadKey, tileTypes []TileType, tileDetails *TileDetails, isTargetLevel bool) error {
-//
-//	// high as we can go... cant do any more, so return nil
-//	if quadKey == 0 {
-//		return nil
-//	}
-//
-//	if t, ok := qm.quadKeyMap[quadKey]; ok {
-//
-//		// whatever groups are in tile t....  add the details to tileDetails but only if full (if we're processing parent)
-//		for _, g := range t.groups {
-//			for _, tileType := range tileTypes {
-//				hasTileType, isFull := g.Details.HasTileTypeAndFull(tileType)
-//				if hasTileType {
-//
-//					// if we have a match for at least one of the tiletypes, then add to the tileDetails.Groups slice.
-//					if isTargetLevel || isFull {
-//						tileDetails.Groups = append(tileDetails.Groups, TileDetailsGroup{GroupTileTypeDetails: g, QuadKey: quadKey})
-//						break
-//					}
-//				}
-//			}
-//		}
-//	}
-//
-//	parentQuadKey, err := quadKey.Parent()
-//	if err != nil {
-//		// cant go any higher... stop the iteration.
-//		return nil
-//	}
-//
-//	// isTargetLevel false due to we're processing an ancestor now.
-//	return qm.GetTileDetailsForQuadkeyAndTileType(parentQuadKey, tileTypes, tileDetails, false)
-//}
 
 func (qm *QuadMap) GetTileDetailsForSlippyCoordsAndTileTypeTopDown(x uint32, y uint32, z byte, tileTypes []TileType, tileDetails *TileDetails) error {
 	quadKey := GenerateQuadKeyIndexFromSlippy(x, y, z)
@@ -351,29 +282,29 @@ func (qm *QuadMap) GetTileDetailsForQuadkeyAndTileTypeTopDown(quadKey QuadKey, t
 	targetScale := quadKey.Zoom()
 	for _, qk := range allAncestors {
 		x, y, z := qk.SlippyCoords()
-		fmt.Printf("X %d Y %d Z %d\n", x, y, z)
 
-		if t, ok := qm.quadKeyMap[qk]; ok {
+		qm.lock.RLock()
+		t, ok := qm.quadKeyMap[qk]
+		qm.lock.RUnlock()
+		if ok {
+
 			// whatever groups are in tile t....  add the details to tileDetails but only if full (if we're processing parent)
-			for i, g := range t.groups {
+			for _, g := range t.GetGroupDetails() {
 				for _, tileType := range tileTypes {
 					hasTileType, isFull := g.Details.HasTileTypeAndFull(tileType)
 					if hasTileType {
-
 						if isFull || qk.Zoom() == targetScale {
-							tileDetails.Groups = append(tileDetails.Groups, TileDetailsGroup{GroupTileTypeDetails: g.Details, QuadKey: qk})
+							tileDetails.AddTileDetailsGroup(TileDetailsGroup{GroupTileTypeDetails: g.Details, QuadKey: qk})
 							continue
 						}
-						//tileDetails.Groups = append(tileDetails.Groups, TileDetailsGroup{GroupTileTypeDetails: g.Details, QuadKey: qk})
 					}
 
 					// If at watermark, then need to populate the quadmap to further scale depths and
 					// reset the IsWatermark to a different depth.
 					if g.Data[tileType].IsWatermark {
 						// reset IsWaterMark...
-						data := t.groups[i].Data[tileType]
-						data.IsWatermark = false
-						t.groups[i].Data[tileType] = data
+
+						t.ClearWatermarkForGroupIDAndTileType(g.Details.GroupID(), tileType)
 
 						if g.Data[tileType].Data == nil {
 							fmt.Printf("coord %d %d %d has no data: groupid %d\n", x, y, z, g.Details.GroupID())
@@ -503,28 +434,7 @@ func (qm *QuadMap) PrintStats() {
 		groupSize := len(v.groups)
 
 		x, y, z := k.SlippyCoords()
-		fmt.Printf("X %d Y %d Z %d\n", x, y, z)
 
-		if z == 16 {
-			qks := k.GetAllAncestorsAndSelf()
-			for _, qk := range qks {
-				tt, _ := qm.GetExactTileForQuadKey(qk)
-				xxx, yyy, zzz := qk.SlippyCoords()
-				if xxx == 4322 && yyy == 6419 && zzz == 13 {
-					fmt.Printf("snoop\n")
-				}
-				fmt.Printf("XX YY ZZ is X %d , Y %d, Z %d\n", xxx, yyy, zzz)
-				if tt.groups[0].Data[TileTypeVert].IsWatermark {
-					//fmt.Printf("X:%d Y:%d Z:%d is watermark\n", x, y, z)
-
-					parent, _ := qk.Parent()
-					parent2, _ := parent.Parent()
-					xx, yy, zz := parent2.SlippyCoords()
-					fmt.Printf("grandparent of watermark is X %d , Y %d, Z %d\n", xx, yy, zz)
-				}
-			}
-		}
-		//z := k.Zoom()
 		if _, ok := quadKeyScaleDetails[z]; !ok {
 			quadKeyScaleDetails[z] = 1
 		} else {
