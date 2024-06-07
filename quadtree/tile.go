@@ -281,3 +281,16 @@ func (t *Tile) GetFullForGroupIDAndTileType(groupID GroupID, tileType TileType) 
 	}
 	return false
 }
+
+func (t *Tile) GetGroupDetailsByGroupIDAndTileType(groupID GroupID, tileType TileType) *GroupDetails {
+
+	for _, g := range t.groups {
+		if g.Details.GroupID() == groupID {
+			hasTileType, _ := g.Details.HasTileTypeAndFull(tileType)
+			if hasTileType {
+				return &g
+			}
+		}
+	}
+	return nil
+}

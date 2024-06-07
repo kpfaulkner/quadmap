@@ -160,6 +160,10 @@ func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z uint32, groupI
 	t := NewTileWithQuadKey(quadKey)
 	t.SetFullForGroupIDAndTileType(groupID, tileType, false)
 	t.SetRawDataGroupIDAndTileType(groupID, tileType, rawData)
+
+	if rawData == nil {
+		fmt.Printf("XXXXXXX nil data\n")
+	}
 	qm.quadKeyMap[t.QuadKey] = t
 	return t, nil
 }
@@ -371,6 +375,19 @@ func (qm *QuadMap) GetTileDetailsForQuadkeyAndTileTypeTopDown(quadKey QuadKey, t
 						data.IsWatermark = false
 						t.groups[i].Data[tileType] = data
 
+						if g.Data[tileType].Data == nil {
+							fmt.Printf("coord %d %d %d has no data: groupid %d\n", x, y, z, g.Details.GroupID())
+
+							qks := qk.GetAllAncestorsAndSelf()
+							for _, qk := range qks {
+								t := qm.quadKeyMap[qk]
+								gd := t.GetGroupDetailsByGroupIDAndTileType(g.Details.GroupID(), tileType)
+								if gd != nil {
+									fmt.Printf("group details %+v\n", *gd)
+								}
+							}
+
+						}
 						// populate the quadmap down to targetScale (so dont have to populate all scale/zoom levels)
 						err := qm.dataReader(qm, g.Data[tileType].Data, g.Details.GroupID(), tileType, targetScale)
 						if err != nil {
@@ -453,7 +470,36 @@ func (qm *QuadMap) PrintStats() {
 
 	groupDetailSizes := make(map[int]int)
 	quadKeyScaleDetails := make(map[byte]int)
+	groupsWithoutData := make(map[GroupID]int)
+	groupsWithData := make(map[GroupID]int)
 	for k, v := range qm.quadKeyMap {
+
+		for _, g := range v.groups {
+			if g.Data[TileTypeVert].Data == nil {
+				groupsWithoutData[g.Details.GroupID()]++
+				x, y, z := k.SlippyCoords()
+				fmt.Printf("coord %d %d %d has no data: groupid %d\n", x, y, z, g.Details.GroupID())
+
+				qks := k.GetAllAncestorsAndSelf()
+				for _, qk := range qks {
+					if t, ok := qm.quadKeyMap[qk]; ok {
+						gd := t.GetGroupDetailsByGroupIDAndTileType(g.Details.GroupID(), TileTypeVert)
+						if gd != nil {
+							x, y, z := qk.SlippyCoords()
+							if gd.Data[TileTypeVert].Data == nil {
+								fmt.Printf("coord %d %d %d has NO data: groupid %d\n", x, y, z, g.Details.GroupID())
+							} else {
+								fmt.Printf("coord %d %d %d has data: groupid %d\n", x, y, z, g.Details.GroupID())
+							}
+						}
+					}
+				}
+
+			} else {
+				groupsWithData[g.Details.GroupID()]++
+			}
+		}
+
 		groupSize := len(v.groups)
 
 		x, y, z := k.SlippyCoords()
@@ -511,5 +557,16 @@ func (qm *QuadMap) PrintStats() {
 	fmt.Printf("total groups recorded is %d\n", total)
 
 	fmt.Printf("total number of uint64s stored (QKs + group details) %d\n", total+qm.NumberOfTiles())
+
+	count := 0
+	for k, _ := range groupsWithoutData {
+		if _, ok := groupsWithData[k]; ok {
+			fmt.Printf("Group %d has data and no data\n", k)
+			count++
+		}
+	}
+	fmt.Printf("Groups with both data and no data %d\n", count)
+	fmt.Printf("Groups without data %d\n", len(groupsWithoutData))
+	fmt.Printf("Groups with data %d\n", len(groupsWithData))
 
 }
