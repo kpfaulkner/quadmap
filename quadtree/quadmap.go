@@ -182,7 +182,7 @@ func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z uint32, groupI
 	defer qm.lock.Unlock()
 	// check if child exists.
 	if tile, ok := qm.quadKeyMap[quadKey]; ok {
-		err := tile.SetFullForGroupIDAndTileType(groupID, tileType, false)
+		err := tile.UpdateTileTypeFullRawDataWatermarkByGroupID(groupID, tileType, false, false, rawData)
 		if err != nil {
 			return nil, err
 		}
@@ -190,8 +190,10 @@ func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z uint32, groupI
 	}
 
 	t := NewTileWithQuadKey(quadKey)
-	t.SetFullForGroupIDAndTileType(groupID, tileType, false)
-	t.SetRawDataGroupIDAndTileType(groupID, tileType, rawData)
+	err := t.UpdateTileTypeFullRawDataWatermarkByGroupID(groupID, tileType, false, false, rawData)
+	if err != nil {
+		return nil, err
+	}
 
 	qm.quadKeyMap[t.QuadKey] = t
 	return t, nil
@@ -306,6 +308,7 @@ func (qm *QuadMap) GetTileDetailsForQuadkeyAndTileTypeTopDown(quadKey QuadKey, t
 
 						t.ClearWatermarkForGroupIDAndTileType(g.Details.GroupID(), tileType)
 
+						fmt.Printf("quadmap size %d\n", len(qm.quadKeyMap))
 						if g.Data[tileType].Data == nil {
 							fmt.Printf("coord %d %d %d has no data: groupid %d\n", x, y, z, g.Details.GroupID())
 
@@ -324,6 +327,7 @@ func (qm *QuadMap) GetTileDetailsForQuadkeyAndTileTypeTopDown(quadKey QuadKey, t
 						if err != nil {
 							return err
 						}
+						fmt.Printf("quadmap size after update %d\n", len(qm.quadKeyMap))
 					}
 				}
 			}
@@ -396,7 +400,7 @@ func (qm *QuadMap) GetSlippyBoundsForGroupIDTileTypeAndZoom(groupID GroupID, til
 	return minX, minY, maxX, maxY, nil
 }
 
-func (qm *QuadMap) PrintStats() {
+func (qm *QuadMap) PrintStats(tileType TileType) {
 	fmt.Printf("Number of tiles %d\n", qm.NumberOfTiles())
 
 	groupDetailSizes := make(map[int]int)
@@ -406,7 +410,7 @@ func (qm *QuadMap) PrintStats() {
 	for k, v := range qm.quadKeyMap {
 
 		for _, g := range v.groups {
-			if g.Data[TileTypeVert].Data == nil {
+			if g.Data[tileType].Data == nil {
 				groupsWithoutData[g.Details.GroupID()]++
 				x, y, z := k.SlippyCoords()
 				fmt.Printf("coord %d %d %d has no data: groupid %d\n", x, y, z, g.Details.GroupID())
@@ -414,10 +418,10 @@ func (qm *QuadMap) PrintStats() {
 				qks := k.GetAllAncestorsAndSelf()
 				for _, qk := range qks {
 					if t, ok := qm.quadKeyMap[qk]; ok {
-						gd := t.GetGroupDetailsByGroupIDAndTileType(g.Details.GroupID(), TileTypeVert)
+						gd := t.GetGroupDetailsByGroupIDAndTileType(g.Details.GroupID(), tileType)
 						if gd != nil {
 							x, y, z := qk.SlippyCoords()
-							if gd.Data[TileTypeVert].Data == nil {
+							if gd.Data[tileType].Data == nil {
 								fmt.Printf("coord %d %d %d has NO data: groupid %d\n", x, y, z, g.Details.GroupID())
 							} else {
 								fmt.Printf("coord %d %d %d has data: groupid %d\n", x, y, z, g.Details.GroupID())
@@ -448,7 +452,7 @@ func (qm *QuadMap) PrintStats() {
 		}
 
 		// only 1 group and only vert..
-		if v.groups[0].Data[TileTypeVert].IsWatermark {
+		if v.groups[0].Data[tileType].IsWatermark {
 			fmt.Printf("X:%d Y:%d Z:%d is watermark\n", x, y, z)
 		}
 

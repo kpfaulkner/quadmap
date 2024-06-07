@@ -1,7 +1,6 @@
 package quadtree
 
 import (
-	"fmt"
 	"sync"
 )
 
@@ -166,8 +165,6 @@ func NewTileWithQuadKey(quadKey QuadKey) *Tile {
 }
 
 func (t *Tile) AddGroupDetails(gd GroupDetails) error {
-	t.lock.Lock()
-	defer t.lock.Unlock()
 	t.groups = append(t.groups, gd)
 	return nil
 }
@@ -220,16 +217,33 @@ func (t *Tile) GetWatermarkForGroupIDAndTileType(groupID GroupID, tt TileType) b
 	return false
 }
 
-// SetTileType for a given groupID and tiletype.
-// Checks if groupID + tiletype combination already exists. Returns error if so.
-func (t *Tile) SetTileType(groupID GroupID, tt TileType) error {
+// UpdateTileTypeFullRawDataByGroupID for a given GroupID, either update the tiletype, full and rawdata
+// if they exist, otherwise create them.
+func (t *Tile) UpdateTileTypeFullRawDataWatermarkByGroupID(groupID GroupID, tt TileType, full bool, isWaterMark bool, rawData *[]byte) error {
 
-	if t.HasTileType(groupID, tt) {
-		return fmt.Errorf("GroupID + TileType combination already exists")
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	found := false
+	for groupIdx, g := range t.groups {
+		if g.Details.GroupID() == groupID {
+			newGroupDetails := g.Details.SetTileTypeAndFull(tt, full)
+			t.groups[groupIdx].Details = newGroupDetails
+			data := t.groups[groupIdx].Data[tt]
+			data.Data = rawData
+			data.IsWatermark = isWaterMark
+			t.groups[groupIdx].Data[tt] = data
+			found = true
+		}
 	}
 
-	gd := NewGroupDetails(groupID, tt, false)
-	t.AddGroupDetails(gd)
+	if !found {
+		gd := NewGroupDetails(groupID, tt, full)
+		data := RawData{Data: rawData, IsWatermark: isWaterMark}
+		gd.Data[tt] = data
+		t.AddGroupDetails(gd)
+	}
+
 	return nil
 }
 
@@ -254,57 +268,8 @@ func (t *Tile) GetTileZoomLevel() byte {
 	return t.QuadKey.Zoom()
 }
 
-// SetFullForGroupIDAndTileType sets the full flag for a given tile type.
-// Only creates Full map at this stage (saves us creating a potential mass of unused maps)
-// If is full then by definition we're at the watermark?
-func (t *Tile) SetFullForGroupIDAndTileType(groupID GroupID, tileType TileType, full bool) error {
-
-	// FIXME(kpfaulkner) need lock around iterating t.groups.
-
-	// loop through groups... see if already have groupid + type match.
-	for i, g := range t.groups {
-		ggId := g.Details.GroupID()
-		if ggId == groupID && g.Details.HasTileType(tileType) {
-
-			t.lock.Lock()
-			updatedGroupDetails := g.Details.SetTileTypeAndFull(tileType, full)
-			// remove original, add new.
-			t.groups[i].Details = updatedGroupDetails
-			t.lock.Unlock()
-			return nil
-		}
-	}
-
-	gd := NewGroupDetails(groupID, tileType, full)
-	t.AddGroupDetails(gd)
-	t.SetWatermarkForGroupIDAndTileType(groupID, tileType)
-	return nil
-}
-
-func (t *Tile) SetRawDataGroupIDAndTileType(groupID GroupID, tileType TileType, rawData *[]byte) error {
-
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	// loop through groups... see if already have groupid + type match.
-	for i, g := range t.groups {
-		ggId := g.Details.GroupID()
-		if ggId == groupID && g.Details.HasTileType(tileType) {
-
-			data := g.Data[tileType]
-			data.Data = rawData
-
-			// add pointer to raw data for this tile.
-			t.groups[i].Data[tileType] = data
-
-			return nil
-		}
-	}
-	return nil
-}
-
-// GetFullForGroupIDAndTileType gets the full flag for a given tile type. Defaults to false if no flag found
-func (t *Tile) GetFullForGroupIDAndTileType(groupID GroupID, tileType TileType) bool {
+// IsTileFullByGroupIDAndTileType gets the full flag for a given tile type. Defaults to false if no flag found
+func (t *Tile) IsTileFullByGroupIDAndTileType(groupID GroupID, tileType TileType) bool {
 
 	t.lock.RLock()
 	defer t.lock.RUnlock()
