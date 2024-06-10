@@ -321,6 +321,72 @@ func (qm *QuadMap) GetTileDetailsForQuadkeyAndTileTypeTopDown(quadKey QuadKey, t
 	return nil
 }
 
+type GroupIDAndTileTypePair struct {
+	GroupID  GroupID
+	TileType TileType
+}
+
+func (qm *QuadMap) GetGroupIDsForQuadKeysTopDown(quadKeys []QuadKey, tileTypes []TileType) ([]GroupIDAndTileTypePair, error) {
+
+	groupIDs := make(map[GroupID]map[TileType]bool)
+	for _, quadKey := range quadKeys {
+		allAncestors := quadKey.GetAllAncestorsAndSelf()
+
+		targetScale := quadKey.Zoom()
+		for _, qk := range allAncestors {
+
+			qm.lock.RLock()
+			t, ok := qm.quadKeyMap[qk]
+			qm.lock.RUnlock()
+			if ok {
+
+				// whatever groups are in tile t....  add the details to tileDetails but only if full (if we're processing parent)
+				for _, g := range t.GetGroupDetails() {
+					for _, tileType := range tileTypes {
+						hasTileType, isFull := g.Details.HasTileTypeAndFull(tileType)
+						if hasTileType {
+							if isFull || qk.Zoom() == targetScale {
+								if _, ok := groupIDs[g.Details.GroupID()]; !ok {
+									groupIDs[g.Details.GroupID()] = make(map[TileType]bool)
+								}
+								groupIDs[g.Details.GroupID()][tileType] = true
+								continue
+							}
+						}
+
+						// If at watermark, then need to populate the quadmap to further scale depths and
+						// reset the IsWatermark to a different depth.
+						if g.Data[tileType].IsWatermark {
+							// reset IsWaterMark...
+
+							t.ClearWatermarkForGroupIDAndTileType(g.Details.GroupID(), tileType)
+							// populate the quadmap down to targetScale (so dont have to populate all scale/zoom levels)
+							err := qm.dataReader(qm, g.Data[tileType].Data, g.Details.GroupID(), tileType, targetScale)
+							if err != nil {
+								return nil, err
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	groupIDList := []GroupIDAndTileTypePair{}
+
+	for k, v := range groupIDs {
+		for tt, _ := range v {
+			groupIDList = append(groupIDList, GroupIDAndTileTypePair{
+				GroupID:  k,
+				TileType: tt,
+			})
+		}
+	}
+
+	// by this stage tileDetails should be populated with all tiles from top down that have matches (full or target scale)
+	return groupIDList, nil
+}
+
 // GetSlippyBoundsForGroupIDTileTypeAndZoom returns the minx,miny,maxx,maxy slippy coords for a given zoom level
 // extracted from the quadmap. Brute forcing it for now.
 func (qm *QuadMap) GetSlippyBoundsForGroupIDTileTypeAndZoom(groupID GroupID, tileType TileType, zoom byte) (uint32, uint32, uint32, uint32, error) {
