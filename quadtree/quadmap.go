@@ -326,15 +326,17 @@ type GroupIDAndTileTypePair struct {
 	TileType TileType
 }
 
-func (qm *QuadMap) GetGroupIDsForQuadKeysTopDown(quadKeys []QuadKey, tileTypes []TileType) ([]GroupIDAndTileTypePair, error) {
+// GetGroupIDsForQuadKeysTopDown searches the QuadMap for the passed in quadKeys.
+func (qm *QuadMap) GetGroupIDsForQuadKeysTopDown(quadKeys []QuadKey, tileTypes []TileType, upperScale byte, lowerScale byte) ([]GroupIDAndTileTypePair, error) {
 
 	groupIDs := make(map[GroupID]map[TileType]bool)
 	for _, quadKey := range quadKeys {
 		allAncestors := quadKey.GetAllAncestorsAndSelf()
 
-		targetScale := quadKey.Zoom()
+		// skip to level 12
+		// need to determine if this is realistic for ALL surveys... or just the collection I've tried?
+		allAncestors = allAncestors[upperScale:]
 		for _, qk := range allAncestors {
-
 			qm.lock.RLock()
 			t, ok := qm.quadKeyMap[qk]
 			qm.lock.RUnlock()
@@ -345,7 +347,7 @@ func (qm *QuadMap) GetGroupIDsForQuadKeysTopDown(quadKeys []QuadKey, tileTypes [
 					for _, tileType := range tileTypes {
 						hasTileType, isFull := g.Details.HasTileTypeAndFull(tileType)
 						if hasTileType {
-							if isFull || qk.Zoom() == targetScale {
+							if isFull || qk.Zoom() == lowerScale {
 								if _, ok := groupIDs[g.Details.GroupID()]; !ok {
 									groupIDs[g.Details.GroupID()] = make(map[TileType]bool)
 								}
@@ -361,7 +363,7 @@ func (qm *QuadMap) GetGroupIDsForQuadKeysTopDown(quadKeys []QuadKey, tileTypes [
 
 							t.ClearWatermarkForGroupIDAndTileType(g.Details.GroupID(), tileType)
 							// populate the quadmap down to targetScale (so dont have to populate all scale/zoom levels)
-							err := qm.dataReader(qm, g.Data[tileType].Data, g.Details.GroupID(), tileType, targetScale)
+							err := qm.dataReader(qm, g.Data[tileType].Data, g.Details.GroupID(), tileType, lowerScale)
 							if err != nil {
 								return nil, err
 							}
