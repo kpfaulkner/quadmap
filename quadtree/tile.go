@@ -8,14 +8,11 @@ type TileType uint16
 type GroupID uint32
 
 const (
-	TileTypeVert      TileType = 0b000000000001
-	TileTypeEast      TileType = 0b000000000010
-	TileTypeNorth     TileType = 0b000000000100
-	TileTypeSouth     TileType = 0b00000001000
-	TileTypeWest      TileType = 0b0000010000
-	TileTypeDsm       TileType = 0b0000100000
-	TileTypeTrueOrtho TileType = 0b0001000000
-	TileTypeNIR       TileType = 0b0010000000
+	TileTypeVert  TileType = 0b000000000001
+	TileTypeEast  TileType = 0b000000000010
+	TileTypeNorth TileType = 0b000000000100
+	TileTypeSouth TileType = 0b00000001000
+	TileTypeWest  TileType = 0b0000010000
 )
 
 // GroupTileTypeDetails has bare information about the "group" that created the tile this is associated with.
@@ -68,15 +65,6 @@ func (gd GroupTileTypeDetails) ReturnTileTypes() []TileType {
 	}
 	if gd.HasTileType(TileTypeWest) {
 		tileTypes = append(tileTypes, TileTypeWest)
-	}
-	if gd.HasTileType(TileTypeDsm) {
-		tileTypes = append(tileTypes, TileTypeDsm)
-	}
-	if gd.HasTileType(TileTypeTrueOrtho) {
-		tileTypes = append(tileTypes, TileTypeTrueOrtho)
-	}
-	if gd.HasTileType(TileTypeNIR) {
-		tileTypes = append(tileTypes, TileTypeNIR)
 	}
 	return tileTypes
 }
