@@ -95,6 +95,50 @@ func ExteriorCovering(g geom.Geometry, maxTiles int) ([]quadtree.QuadKey, error)
 	}
 	return cover, nil
 }
+func ExteriorCoveringNoMax(g geom.Geometry) ([]quadtree.QuadKey, error) { // TODO: minZoom
+	score, ok, err := intersection(0, g)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
+	}
+	pq := priorityQueue{score}
+	for len(pq) > 0 {
+		cell := heap.Pop(&pq).(coveringTile)
+		if cell.outsideArea == 0 {
+			heap.Push(&pq, cell)
+			break
+		}
+		if _, _, z := cell.qk.SlippyCoords(); z >= 22 {
+			heap.Push(&pq, cell)
+			break
+		}
+
+		var next []coveringTile
+		for _, ch := range cell.qk.Children() {
+			score, overlap, err := intersection(ch, g)
+			if err != nil {
+				return nil, err
+			}
+			if overlap {
+				next = append(next, score)
+			}
+		}
+		//if len(pq)+len(next) > maxTiles {
+		//	heap.Push(&pq, cell)
+		//	break
+		//}
+		for _, c := range next {
+			heap.Push(&pq, c)
+		}
+	}
+	cover := make([]quadtree.QuadKey, len(pq))
+	for i, c := range pq {
+		cover[i] = c.qk
+	}
+	return cover, nil
+}
 
 func AllAncestors(quadKeys []quadtree.QuadKey, minZoom byte) ([]quadtree.QuadKey, error) {
 	seen := make(map[quadtree.QuadKey]bool)

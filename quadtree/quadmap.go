@@ -411,7 +411,8 @@ func (qm *QuadMap) GetSlippyBoundsForGroupIDTileTypeAndZoom(groupID GroupID, til
 
 		// only get tiletype and groupID that we want. Also needs to be either equal zoom OR is full.
 		for _, g := range v.groups {
-			if g.Details.GroupID() == groupID {
+			gID := g.Details.GroupID()
+			if gID== groupID {
 				hasTileType, isFull := g.Details.HasTileTypeAndFull(tileType)
 
 				if !hasTileType {
