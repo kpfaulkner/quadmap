@@ -10,12 +10,33 @@ import (
 )
 
 // QuadKey is a key representing a Slippy tile.
+//		|63-----------------16|15--------------11|10--------------6|    5  |4----------0|
+//		| Identify Tile       |      TileType    |      Full       |       | Zoom level |
+//		|                     |        00001     |      00001      |unused |   00001   |
+//
+// Need to handle 24 levels of zoom... so 48 bits. Leaving 16 bits.
+// Need 5 bits for zoom level..  leaving 11 bits.
+// 2 bits per tile type (tile type + full bit) so can only handle 5 tiletypes...
+// leaving 1 spare.
+
 type QuadKey uint64
 
-const MaxZoom = 29
+const (
+	TileTypeVert  TileType = 0b000000000001
+	TileTypeEast  TileType = 0b000000000010
+	TileTypeNorth TileType = 0b000000000100
+	TileTypeSouth TileType = 0b00000001000
+	TileTypeWest  TileType = 0b0000010000
 
-// Zoom level is the bottom 5 bits
-const zoomMask = 0b11111
+	MaxZoom = 24
+	MinZoom = 1
+
+	// Zoom level is the bottom 5 bits
+	zoomMask = 0b11111
+
+	tileTypeOffset     = 11
+	tileTypeFullOffset = 6
+)
 
 // Parent get parents quadkey for passed quadkey
 func (q QuadKey) Parent() (QuadKey, error) {
@@ -79,8 +100,34 @@ func (q QuadKey) Children() []QuadKey {
 	return children
 }
 
+// AddTileTypeToQuadKey creates new quadkey that reflects tileType + full being set.
+func (q QuadKey) AddTileTypeToQuadKey(tileType TileType, full bool) QuadKey {
+	tileTypeShift := QuadKey(tileType) << tileTypeOffset
+	qk2 := q | tileTypeShift
+
+	fullBitMask := QuadKey(tileType) << tileTypeFullOffset
+	if !full {
+		bit = 1
+		XXXXXXXXXXX
+
+		XOR it
+	}
+	qk2 = qk2 | QuadKey(bit)<<tileTypeFullOffset
+
+	return qk2
+}
+
 // GenerateQuadKeyIndexFromSlippy generates the quadkey index from slippy coords
-func GenerateQuadKeyIndexFromSlippy(x uint32, y uint32, zoomLevel byte) QuadKey {
+// If zoom level is < MinZoomLevel or > MaxZoomLevel return error.
+// Only generate/care about bits 63 -> 32..
+// Although inefficient, we generate entire quadkey (zoom 1 -> zoomLevel) but then
+// shift left to trim off the first 9 zoom levels. This is because I might want
+// to repurpose the generic quad key generation for later.
+func GenerateQuadKeyIndexFromSlippy(x uint32, y uint32, zoomLevel byte) (QuadKey, error) {
+
+	if zoomLevel < MinZoom || zoomLevel > MaxZoom {
+		return 0, errors.New("invalid zoom level")
+	}
 	var binaryQuadkey QuadKey
 	for i := zoomLevel; i > 0; i-- {
 		var mask uint32 = 1 << (i - 1)
@@ -92,11 +139,13 @@ func GenerateQuadKeyIndexFromSlippy(x uint32, y uint32, zoomLevel byte) QuadKey 
 			binaryQuadkey |= 0b1 << bitLocation
 		}
 	}
+
 	binaryQuadkey |= QuadKey(zoomLevel)
-	return binaryQuadkey
+	return binaryQuadkey, nil
 }
 
 // SlippyCoords generates the slippy coords from quadkey index
+// Needs to take into account that quadkey starts at zoom level 10.
 func (q QuadKey) SlippyCoords() (uint32, uint32, byte) {
 	var x uint32
 	var y uint32
