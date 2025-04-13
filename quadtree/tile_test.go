@@ -47,7 +47,7 @@ func TestTwoSetTileTypes(t *testing.T) {
 	assert.Equal(t, false, tileTypeFull, "Should not have tileType")
 
 	tile.AddTileType(TileTypeVert, true)
-	tile.AddTileType(TileTypeVert, true)
+	tile.AddTileType(TileTypeNorth, true)
 
 	tileTypeExists, tileTypeFull = tile.HasTileTypeAndFull(TileTypeVert)
 	assert.Equal(t, true, tileTypeExists, "Should not have tileType")

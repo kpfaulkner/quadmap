@@ -16,6 +16,14 @@ func quadKeyToWKT(t *testing.T, qk quadtree.QuadKey) string {
 	return env.AsGeometry().AsText()
 }
 
+func mustGenerateQuadKeyIndexFromSlippy(x uint32, y uint32, zoomLevel byte) quadtree.QuadKey {
+	qk, err := quadtree.GenerateQuadKeyIndexFromSlippy(x, y, zoomLevel)
+	if err != nil {
+		panic(err)
+	}
+	return qk
+}
+
 func TestExternalCovering(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -24,19 +32,11 @@ func TestExternalCovering(t *testing.T) {
 		expect   []quadtree.QuadKey
 	}{
 		{
-			name:     "whole map",
-			wkt:      quadKeyToWKT(t, quadtree.QuadKey(0)),
-			maxCells: 20,
-			expect: []quadtree.QuadKey{
-				quadtree.GenerateQuadKeyIndexFromSlippy(0, 0, 0),
-			},
-		},
-		{
 			name:     "single point",
-			wkt:      "POINT(151.196 -33.866)",
+			wkt:      "POINT(153.156 -30.316)",
 			maxCells: 20,
 			expect: []quadtree.QuadKey{
-				quadtree.GenerateQuadKeyIndexFromSlippy(493915273, 322167045, 29),
+				mustGenerateQuadKeyIndexFromSlippy(15526194, 9872384, 24),
 			},
 		},
 		{
@@ -67,7 +67,7 @@ func TestExternalCovering(t *testing.T) {
 		},
 		{
 			name:     "single cell includes neighbouring cells because they intersect the boundary",
-			wkt:      quadKeyToWKT(t, quadtree.GenerateQuadKeyIndexFromSlippy(123, 456, 10)),
+			wkt:      quadKeyToWKT(t, mustGenerateQuadKeyIndexFromSlippy(123, 456, 10)),
 			maxCells: 20,
 			expect: []quadtree.QuadKey{
 				0x2b56ef000000000c,
@@ -127,6 +127,9 @@ func TestExternalCovering(t *testing.T) {
 			require.NoError(t, err)
 
 			cov, err := ExteriorCovering(g, tc.maxCells)
+
+			x, y, z := cov[0].SlippyCoords()
+			fmt.Printf("x: %d, y: %d, z: %d\n", x, y, z)
 			require.NoError(t, err)
 			assert.ElementsMatch(t, tc.expect, cov)
 		})
@@ -150,7 +153,7 @@ func TestSearchRanges(t *testing.T) {
 		},
 		{
 			name:    "single tile",
-			cells:   []quadtree.QuadKey{quadtree.GenerateQuadKeyIndexFromSlippy(123, 456, 9)},
+			cells:   []quadtree.QuadKey{mustGenerateQuadKeyIndexFromSlippy(123, 456, 9)},
 			minZoom: 0,
 			expect: []quadtree.QuadKeyRange{
 				{Start: 0x0000000000000000, End: 0x0000000000000000},
@@ -166,7 +169,7 @@ func TestSearchRanges(t *testing.T) {
 		},
 		{
 			name:    "single tile with minZoom",
-			cells:   []quadtree.QuadKey{quadtree.GenerateQuadKeyIndexFromSlippy(123, 456, 9)},
+			cells:   []quadtree.QuadKey{mustGenerateQuadKeyIndexFromSlippy(123, 456, 9)},
 			minZoom: 5,
 			expect: []quadtree.QuadKeyRange{
 				{Start: 0xad40000000000005, End: 0xad40000000000005},

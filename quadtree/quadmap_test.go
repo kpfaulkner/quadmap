@@ -9,7 +9,7 @@ import (
 // TestAddTile create quadmap and adds tile
 func TestAddTile(t *testing.T) {
 	qm := NewQuadMap(10)
-	tile, err := NewTile(0, 0, 0)
+	tile, err := NewTile(1, 1, 1)
 	assert.NoError(t, err, "Should not have error when creating tile")
 	err = qm.AddTile(tile)
 	assert.NoError(t, err, "Should not have error when adding tile")
@@ -18,7 +18,7 @@ func TestAddTile(t *testing.T) {
 // TestNumberOfTiles create quadmap and adds tile
 func TestNumberOfTiles(t *testing.T) {
 	qm := NewQuadMap(10)
-	tile, err := NewTile(0, 0, 0)
+	tile, err := NewTile(1, 1, 1)
 	assert.NoError(t, err, "Should not have error when creating tile")
 	err = qm.AddTile(tile)
 	assert.NoError(t, err, "Should not have error when adding tile")
@@ -31,9 +31,7 @@ func TestNumberOfTiles(t *testing.T) {
 func TestCreateTileAtSlippyCoords(t *testing.T) {
 	qm := NewQuadMap(10)
 	tile, err := NewTile(0, 0, 0)
-	assert.NoError(t, err, "Should not have error when creating tile")
-	err = qm.AddTile(tile)
-	assert.Nil(t, err, "Should not have error when adding tile")
+	assert.Error(t, err, "Should have error when creating tile")
 
 	// quadindex for 1,1,1 is 0b1100000000000000000000000000000000000000000000000000000000000001
 	tile, err = qm.CreateTileAtSlippyCoords(1, 1, 1, TileTypeVert, true)
