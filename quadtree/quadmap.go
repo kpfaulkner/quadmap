@@ -27,6 +27,9 @@ type QuadMap struct {
 	dataReader DataReader
 
 	lock sync.RWMutex
+
+	// SQLite connection for detailed tile data.
+	storage *Storage
 }
 
 // NewQuadMap create a new quadmap
