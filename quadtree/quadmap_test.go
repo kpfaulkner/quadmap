@@ -36,53 +36,32 @@ func TestCreateTileAtSlippyCoords(t *testing.T) {
 	assert.Nil(t, err, "Should not have error when adding tile")
 
 	// quadindex for 1,1,1 is 0b1100000000000000000000000000000000000000000000000000000000000001
-	tile, err = qm.CreateTileAtSlippyCoords(1, 1, 1, TileTypeVert)
+	tile, err = qm.CreateTileAtSlippyCoords(1, 1, 1, TileTypeVert, true)
 	assert.NoError(t, err, "Should not have error when adding tile")
 	assert.NotNil(t, tile, "Should have tile")
 	assert.Equal(t, QuadKey(0b1100000000000000000000000000000000000000000000000000000000000001), tile.QuadKey, "QuadKey incorrect")
 }
 
-// TestHaveTileForSlippyGroupIDAndTileType create quadmap and adds tile and check if exists
-func TestHaveTileForSlippyGroupIDAndTileType(t *testing.T) {
+// TestGetTileForSlippyAndTileType create quadmap and adds tile and check if exists
+func TestGetTileForSlippyAndTileType(t *testing.T) {
 	qm := NewQuadMap(10)
-	tile, err := NewTile(0, 0, 0)
+	tile, err := NewTile(1, 1, 1)
 	assert.NoError(t, err, "Should not have error when creating tile")
 	err = qm.AddTile(tile)
 	assert.NoError(t, err, "Should not have error when adding tile")
 
 	// quadindex for 5,5,5 is 0b110011000000000000000000000000000000000000000000000000000101
-	tile, err = qm.CreateTileAtSlippyCoords(5, 5, 5, 2)
+	tile, err = qm.CreateTileAtSlippyCoords(5, 5, 5, TileTypeNorth, true)
 	assert.NoError(t, err, "Should not have error when adding tile")
 	assert.NotNil(t, tile, "Should have tile")
 	assert.Equal(t, QuadKey(0b110011000000000000000000000000000000000000000000000000000101), tile.QuadKey, "QuadKey incorrect")
 
-	haveTile, err := qm.HaveTileForSlippyGroupIDAndTileType(5, 5, 5, 2, 3)
-	assert.NoError(t, err, "Should not have error when checking tile/group")
-	assert.True(t, haveTile, "Should have tile")
+	tile, err = qm.GetTileForSlippyAndTileType(5, 5, 5, TileTypeNorth)
+	assert.NoError(t, err, "Should not have error when getting tile")
 
-	_, err = qm.HaveTileForSlippyGroupIDAndTileType(5, 5, 5, 2, 4)
-	assert.Error(t, err, "Should have error when checking tile/group")
-}
+	x, y, z := tile.QuadKey.SlippyCoords()
+	assert.EqualValues(t, x, 5)
+	assert.EqualValues(t, y, 5)
+	assert.EqualValues(t, z, 5)
 
-// TestGetSlippyBoundsForGroupIDTileTypeAndZoom
-func TestGetSlippyBoundsForGroupIDTileTypeAndZoom(t *testing.T) {
-	qm := NewQuadMap(10)
-	tile, err := NewTile(0, 0, 0)
-	assert.NoError(t, err, "Should not have error when creating tile")
-	err = qm.AddTile(tile)
-	assert.NoError(t, err, "Should not have error when adding tile")
-
-	tile, err = qm.CreateTileAtSlippyCoords(3, 2, 2, 2)
-	assert.NoError(t, err, "Should not have error when adding tile")
-	assert.NotNil(t, tile, "Should have tile")
-
-	////tile.SetFullForGroupIDAndTileType(2, 3, true)
-	////minX, minY, maxX, maxY, err := qm.GetSlippyBoundsForGroupIDTileTypeAndZoom(2, 3, 3)
-	////assert.NoError(t, err, "Should not have error when getting bounds")
-	//
-	//// check min/max are top left and bottom right
-	//assert.Equal(t, uint32(6), minX, "MinX incorrect")
-	//assert.Equal(t, uint32(4), minY, "MinY incorrect")
-	//assert.Equal(t, uint32(7), maxX, "MaxX incorrect")
-	//assert.Equal(t, uint32(5), maxY, "MaxY incorrect")
 }

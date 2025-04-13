@@ -10,32 +10,21 @@ import (
 )
 
 // QuadKey is a key representing a Slippy tile.
-//		|63-----------------16|15--------------11|10--------------6|    5  |4----------0|
-//		| Identify Tile       |      TileType    |      Full       |       | Zoom level |
-//		|                     |        00001     |      00001      |unused |   00001   |
+//		|63-----------------16|15----------------------------5|4----------0|
+//		| Identify Tile       |         Unused                | Zoom level |
+//		|                     |                               |   00001    |
 //
 // Need to handle 24 levels of zoom... so 48 bits. Leaving 16 bits.
-// Need 5 bits for zoom level..  leaving 11 bits.
-// 2 bits per tile type (tile type + full bit) so can only handle 5 tiletypes...
-// leaving 1 spare.
+// Need 5 bits for zoom level..
 
 type QuadKey uint64
 
 const (
-	TileTypeVert  TileType = 0b000000000001
-	TileTypeEast  TileType = 0b000000000010
-	TileTypeNorth TileType = 0b000000000100
-	TileTypeSouth TileType = 0b00000001000
-	TileTypeWest  TileType = 0b0000010000
-
 	MaxZoom = 24
 	MinZoom = 1
 
 	// Zoom level is the bottom 5 bits
 	zoomMask = 0b11111
-
-	tileTypeOffset     = 11
-	tileTypeFullOffset = 6
 )
 
 // Parent get parents quadkey for passed quadkey
@@ -98,23 +87,6 @@ func (q QuadKey) Children() []QuadKey {
 		children = append(children, child)
 	}
 	return children
-}
-
-// AddTileTypeToQuadKey creates new quadkey that reflects tileType + full being set.
-func (q QuadKey) AddTileTypeToQuadKey(tileType TileType, full bool) QuadKey {
-	tileTypeShift := QuadKey(tileType) << tileTypeOffset
-	qk2 := q | tileTypeShift
-
-	fullBitMask := QuadKey(tileType) << tileTypeFullOffset
-	if !full {
-		bit = 1
-		XXXXXXXXXXX
-
-		XOR it
-	}
-	qk2 = qk2 | QuadKey(bit)<<tileTypeFullOffset
-
-	return qk2
 }
 
 // GenerateQuadKeyIndexFromSlippy generates the quadkey index from slippy coords
