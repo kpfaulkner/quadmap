@@ -7,6 +7,14 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+type TileDetails struct {
+	ID         int
+	Quadkey    QuadKey
+	WebTileUID string
+	TileType   int
+	Full       bool
+}
+
 // SQLite storage (probably)
 type Storage struct {
 	conn *sql.Conn
@@ -43,7 +51,7 @@ func (s *Storage) createDB() error {
 		return err
 	}
 
-	_, err = conn.ExecContext(context.Background(), `create table if not exists tile_type (id int primary keyquadkey varchar(20) primary key, quadkey varchar(20), type int, full bool)`)
+	_, err = conn.ExecContext(context.Background(), `create table if not exists tile_type (id int primary, quadkey varchar(20), webtile_uid varchar(40), tile_type int, full bool)`)
 	if err != nil {
 		return err
 	}
@@ -51,7 +59,7 @@ func (s *Storage) createDB() error {
 	return nil
 }
 
-func (s *Storage) GetTileByQuadkey(quadkey QuadKey) (*Tile, error) {
+func (s *Storage) GetTileDetailsByQuadkey(quadkey QuadKey) (*Tile, error) {
 
 	return nil, nil
 }
