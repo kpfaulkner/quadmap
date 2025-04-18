@@ -3,7 +3,10 @@ package quadtree
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sync"
+
+	"github.com/peterstace/simplefeatures/geom"
 )
 
 var (
@@ -196,4 +199,75 @@ func createChildForPos(childQuadKey QuadKey, pos int) (*Tile, error) {
 	//child := &Tile{QuadKey: childQuadKey}
 	child := NewTileWithQuadKey(childQuadKey)
 	return child, nil
+}
+
+// GetSlippyBoundsForTileTypeAndZoom returns minX, minY, maxX, maxY slippy coords for a given tiletype and
+// zoom level
+func (qm *QuadMap) GetSlippyBoundsForTileTypeAndZoom(tileType TileType, zoom byte) (uint32, uint32, uint32, uint32, error) {
+
+	var minX uint32 = math.MaxUint32
+	var minY uint32 = math.MaxUint32
+	var maxX uint32 = 0
+	var maxY uint32 = 0
+
+	for quadKey, v := range qm.quadKeyMap {
+
+		if quadKey == 0 {
+			continue // should this be in the quadMap at all?
+		}
+
+		z := quadKey.Zoom()
+		if z > zoom {
+			continue
+		}
+
+		hasTileType, isFull := v.HasTileTypeAndFull(tileType)
+
+		if !hasTileType {
+			continue
+		}
+
+		// only continue if precise zoom level OR this tile is considered full.
+		if z == zoom || isFull {
+			minChild, maxChild, err := quadKey.GetMinMaxEquivForZoomLevel(zoom)
+			if err != nil {
+				return 0, 0, 0, 0, err
+			}
+
+			x, y, _ := minChild.SlippyCoords()
+			if x < minX {
+				minX = x
+			}
+			if y < minY {
+				minY = y
+			}
+
+			x, y, _ = maxChild.SlippyCoords()
+			if x > maxX {
+				maxX = x
+			}
+
+			if y > maxY {
+				maxY = y
+			}
+		}
+	}
+
+	return minX, minY, maxX, maxY, nil
+}
+
+// SearchAOI searches for an AOI within the quadmap and returns all the quadkeys that intersect
+// This version seems extremely inefficient...  but it's just the first attempt. Really hate the idea
+// of reducing AOI down to level 22...
+// Steps:
+//  1) Get cover for AOI
+//  2) Reduce the cover down to minimum zoom level (22 for now)
+//  3) For each quadkey from step2
+//    3.1) Check quadkey in quadmap
+//    3.2) If match, store it...
+//    3.3) Shift to parent of quadkey, loop back to 3.1
+//  4) Have collection of quadkeys that intersect the AOI
+func (qm *QuadMap) SearchAOI(aoi geom.Geometry, tileType TileType, zoom byte) ([]QuadKey, error) {
+
+	return nil, nil
 }

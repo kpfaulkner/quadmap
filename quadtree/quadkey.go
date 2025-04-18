@@ -161,13 +161,13 @@ func (q QuadKey) Zoom() byte {
 func (q QuadKey) Envelope() (geom.Envelope, error) {
 	x, y, z := q.SlippyCoords()
 	return geom.NewEnvelope([]geom.XY{
-		slippyTopLeftToLonLat(x, y, z),
-		slippyTopLeftToLonLat(x+1, y+1, z),
+		SlippyTopLeftToLonLat(x, y, z),
+		SlippyTopLeftToLonLat(x+1, y+1, z),
 	}...), nil
 }
 
 // From https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames#Tile_numbers_to_lon./lat.
-func slippyTopLeftToLonLat(x, y uint32, z byte) geom.XY {
+func SlippyTopLeftToLonLat(x, y uint32, z byte) geom.XY {
 	n := float64(uint64(1) << z)
 	lonDeg := float64(x)/n*360 - 180
 	latRad := math.Atan(math.Sinh(math.Pi * (1 - 2*float64(y)/n)))
@@ -211,4 +211,20 @@ func (q QuadKey) GetAllAncestorsAndSelf() []QuadKey {
 	// reverse list so that it's in order of zoom level.
 	slices.Reverse(ancestors)
 	return ancestors
+}
+
+// GetAllChildrenAndSelf returns all children of given QuadKey at given zoom level
+func (q QuadKey) GetAllChildrenAtZoom(maxZoom byte) []QuadKey {
+	var allQuadKeys []QuadKey
+	if q.Zoom() >= maxZoom {
+		return []QuadKey{q}
+	}
+
+	children := q.Children()
+	for _, child := range children {
+		quadKeys := child.GetAllChildrenAtZoom(maxZoom)
+		allQuadKeys = append(allQuadKeys, quadKeys...)
+	}
+
+	return allQuadKeys
 }
