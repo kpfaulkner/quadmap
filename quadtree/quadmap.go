@@ -49,6 +49,18 @@ func (qm *QuadMap) SetDataReader(dr DataReader) {
 	qm.dataReader = dr
 }
 
+func (qm *QuadMap) GetAllTiles() ([]*Tile, error) {
+
+	allTiles := make([]*Tile, len(qm.quadKeyMap))
+	i := 0
+	for _, tile := range qm.quadKeyMap {
+		allTiles[i] = tile
+		i++
+	}
+
+	return allTiles, nil
+}
+
 // GetParentTile returns parent tile of passed in tile t
 func (qm *QuadMap) GetParentTile(t *Tile) (*Tile, error) {
 	parentKey, err := t.QuadKey.Parent()

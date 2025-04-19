@@ -27,14 +27,6 @@ if the performance of shifting data to sqlite is bad enough to skip this experim
 
 ## MISC
 
-if we have QM having quadkey 
-
-(zoom level 4)
-1101101100000000000000000000000000000000000000000000000000000100
-
-but we have a AOI tile of zoom 3... with key
-1101100000000000000000000000000000000000000000000000000000000011
-
-
-What if we store separate quadkeys for EVERY level? That's going to blow out memory usage (which is already extreme)
-but will allow basically quick check of larger tiles... or am I missing something?
+- Get tile that covers AOI
+- then get all surveys within that tile.... <- tricky bit.
+- perform geom intersection
