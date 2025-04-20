@@ -213,7 +213,25 @@ func (q QuadKey) GetAllAncestorsAndSelf() []QuadKey {
 	return ancestors
 }
 
-// GetAllChildrenAndSelf returns all children of given QuadKey at given zoom level
+// GetAllPossibleChildrenAtZoom returns all children QuadKeys of given QuadKey at given zoom level
+// This returns all children QuadKeys even if the child itself doesn't exist. (ie doesn't check full flag)
+func (q QuadKey) GetAllPossibleChildrenAtZoom(maxZoom byte) []QuadKey {
+	var allQuadKeys []QuadKey
+	if q.Zoom() >= maxZoom {
+		return []QuadKey{q}
+	}
+
+	children := q.Children()
+	for _, child := range children {
+		quadKeys := child.GetAllPossibleChildrenAtZoom(maxZoom)
+		allQuadKeys = append(allQuadKeys, quadKeys...)
+	}
+
+	return allQuadKeys
+}
+
+// GetAllChildrenAtZoom returns all children QuadKeys of given QuadKey at a given zoom level. Checks
+// full flag
 func (q QuadKey) GetAllChildrenAtZoom(maxZoom byte) []QuadKey {
 	var allQuadKeys []QuadKey
 	if q.Zoom() >= maxZoom {
@@ -222,7 +240,7 @@ func (q QuadKey) GetAllChildrenAtZoom(maxZoom byte) []QuadKey {
 
 	children := q.Children()
 	for _, child := range children {
-		quadKeys := child.GetAllChildrenAtZoom(maxZoom)
+		quadKeys := child.GetAllPossibleChildrenAtZoom(maxZoom)
 		allQuadKeys = append(allQuadKeys, quadKeys...)
 	}
 

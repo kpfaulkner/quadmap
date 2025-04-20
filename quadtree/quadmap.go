@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"math"
 	"sync"
-
-	"github.com/peterstace/simplefeatures/geom"
 )
 
 var (
@@ -268,18 +266,80 @@ func (qm *QuadMap) GetSlippyBoundsForTileTypeAndZoom(tileType TileType, zoom byt
 	return minX, minY, maxX, maxY, nil
 }
 
-// SearchAOI searches for an AOI within the quadmap and returns all the quadkeys that intersect
-// This version seems extremely inefficient...  but it's just the first attempt. Really hate the idea
-// of reducing AOI down to level 22...
-// Steps:
-//  1) Get cover for AOI
-//  2) Reduce the cover down to minimum zoom level (22 for now)
-//  3) For each quadkey from step2
-//    3.1) Check quadkey in quadmap
-//    3.2) If match, store it...
-//    3.3) Shift to parent of quadkey, loop back to 3.1
-//  4) Have collection of quadkeys that intersect the AOI
-func (qm *QuadMap) SearchAOI(aoi geom.Geometry, tileType TileType, zoom byte) ([]QuadKey, error) {
+// GetAllChildrenForQuadKeyAndZoom returns all quadkeys for a given zoom level including situations where a parent
+// is marked as full.
+func (qm *QuadMap) GetAllChildrenForQuadKeyAndZoom(qk QuadKey, tileType TileType, zoom byte) ([]QuadKey, error) {
 
-	return nil, nil
+	if qk.Zoom() == zoom {
+		return []QuadKey{qk}, nil
+	}
+
+	allKeys := []QuadKey{}
+	for _, child := range qk.Children() {
+		childData, err := qm.GetExactTileForQuadKey(child)
+		if errors.Is(err, TileNotFoundError) {
+			continue
+		}
+		hasTileType, isFull := childData.HasTileTypeAndFull(tileType)
+		if hasTileType {
+			if isFull {
+				// get all descendants of this tile for correct zoom level and include them.
+				allChildren := child.GetAllPossibleChildrenAtZoom(zoom)
+				allKeys = append(allKeys, allChildren...)
+				continue
+			}
+
+			// check children of this child
+			childKeys, err := qm.GetAllChildrenForQuadKeyAndZoom(child, tileType, zoom)
+			if err != nil {
+				return nil, err
+			}
+			allKeys = append(allKeys, childKeys...)
+		}
+	}
+	return allKeys, nil
+}
+
+func (qm *QuadMap) GetTileDetailsForQuadkeyAndTileTypeTopDown(quadKey QuadKey, tileTypes []TileType, tileDetails *TileDetails) error {
+
+	allAncestors := quadKey.GetAllAncestorsAndSelf()
+
+	targetScale := quadKey.Zoom()
+	for _, qk := range allAncestors {
+
+		qm.lock.RLock()
+		t, ok := qm.quadKeyMap[qk]
+		qm.lock.RUnlock()
+		if ok {
+
+			// whatever groups are in tile t....  add the details to tileDetails but only if full (if we're processing parent)
+			for _, g := range t.GetGroupDetails() {
+				for _, tileType := range tileTypes {
+					hasTileType, isFull := g.Details.HasTileTypeAndFull(tileType)
+					if hasTileType {
+						if isFull || qk.Zoom() == targetScale {
+							tileDetails.AddTileDetailsGroup(TileDetailsGroup{GroupTileTypeDetails: g.Details, QuadKey: qk})
+							continue
+						}
+					}
+
+					// If at watermark, then need to populate the quadmap to further scale depths and
+					// reset the IsWatermark to a different depth.
+					if g.Data[tileType].IsWatermark {
+						// reset IsWaterMark...
+
+						t.ClearWatermarkForGroupIDAndTileType(g.Details.GroupID(), tileType)
+						// populate the quadmap down to targetScale (so dont have to populate all scale/zoom levels)
+						err := qm.dataReader(qm, g.Data[tileType].Data, g.Details.GroupID(), tileType, targetScale)
+						if err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// by this stage tileDetails should be populated with all tiles from top down that have matches (full or target scale)
+	return nil
 }
