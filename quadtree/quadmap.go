@@ -300,46 +300,36 @@ func (qm *QuadMap) GetAllChildrenForQuadKeyAndZoom(qk QuadKey, tileType TileType
 	return allKeys, nil
 }
 
-func (qm *QuadMap) GetTileDetailsForQuadkeyAndTileTypeTopDown(quadKey QuadKey, tileTypes []TileType, tileDetails *TileDetails) error {
+// IsTileCoveredForSlippyCoordsAndTileTypeTopDown takes slippy coord, gets all ancestors to see if tile should exist
+// (by checking ancestors + full flag)
+func (qm *QuadMap) IsTileCoveredForSlippyCoordsAndTileTypeTopDown(x uint32, y uint32, z byte, tileType TileType) (bool, error) {
+
+	quadKey, err := GenerateQuadKeyIndexFromSlippy(x, y, z)
+	if err != nil {
+		return false, err
+	}
 
 	allAncestors := quadKey.GetAllAncestorsAndSelf()
 
-	targetScale := quadKey.Zoom()
 	for _, qk := range allAncestors {
-
 		qm.lock.RLock()
 		t, ok := qm.quadKeyMap[qk]
 		qm.lock.RUnlock()
 		if ok {
 
-			// whatever groups are in tile t....  add the details to tileDetails but only if full (if we're processing parent)
-			for _, g := range t.GetGroupDetails() {
-				for _, tileType := range tileTypes {
-					hasTileType, isFull := g.Details.HasTileTypeAndFull(tileType)
-					if hasTileType {
-						if isFull || qk.Zoom() == targetScale {
-							tileDetails.AddTileDetailsGroup(TileDetailsGroup{GroupTileTypeDetails: g.Details, QuadKey: qk})
-							continue
-						}
-					}
+			// if at target zoom level and match... then true
+			if t.QuadKey.Zoom() == z {
+				// have match... return true
+				return true, nil
+			}
 
-					// If at watermark, then need to populate the quadmap to further scale depths and
-					// reset the IsWatermark to a different depth.
-					if g.Data[tileType].IsWatermark {
-						// reset IsWaterMark...
-
-						t.ClearWatermarkForGroupIDAndTileType(g.Details.GroupID(), tileType)
-						// populate the quadmap down to targetScale (so dont have to populate all scale/zoom levels)
-						err := qm.dataReader(qm, g.Data[tileType].Data, g.Details.GroupID(), tileType, targetScale)
-						if err != nil {
-							return err
-						}
-					}
-				}
+			hasTileType, isFull := t.HasTileTypeAndFull(tileType)
+			if hasTileType && isFull {
+				return true, nil
 			}
 		}
+
 	}
 
-	// by this stage tileDetails should be populated with all tiles from top down that have matches (full or target scale)
-	return nil
+	return false, nil
 }
