@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"sort"
 )
 
 var (
@@ -47,13 +48,20 @@ func (qm *QuadMap) SetDataReader(dr DataReader) {
 	qm.dataReader = dr
 }
 
-func (qm *QuadMap) GetAllTiles() ([]*Tile, error) {
+func (qm *QuadMap) GetAllTiles(sorted bool) ([]*Tile, error) {
 
 	allTiles := make([]*Tile, len(qm.quadKeyMap))
 	i := 0
 	for _, tile := range qm.quadKeyMap {
 		allTiles[i] = tile
 		i++
+	}
+
+	// will this kill perf?
+	if sorted {
+		sort.Slice(allTiles, func(i, j int) bool {
+			return allTiles[i].QuadKey < allTiles[j].QuadKey
+		})
 	}
 
 	return allTiles, nil
