@@ -5,7 +5,9 @@ go 1.23.0
 toolchain go1.24.2
 
 require (
+	github.com/jmoiron/sqlx v1.4.0
 	github.com/peterstace/simplefeatures v0.50.0
+	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.1
 	modernc.org/sqlite v1.37.0
 )
