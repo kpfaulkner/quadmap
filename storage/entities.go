@@ -14,12 +14,13 @@ type TileEntity struct {
 }
 
 type DetailsEntity struct {
-	Id           uint64 `db:"id"`
-	Border       string `db:"border"`
-	SimpleBorder string `db:"simple_border"`
-	TileType     uint16 `db:"tiletype"`
-	DateTime     int64  `db:"datetime"`
-	Enabled      bool   `db:"enabled"`
-	Identifier   string `db:"identifier"`
-	Scale        uint16 `db:"scale"`
+	Id              uint64 `db:"id"`
+	Border          string `db:"border"`
+	SimpleBorder    string `db:"simple_border"`
+	SimpleBorderWKB []byte `db:"simple_border_wkb"`
+	TileType        uint16 `db:"tiletype"`
+	DateTime        int64  `db:"datetime"`
+	Enabled         bool   `db:"enabled"`
+	Identifier      string `db:"identifier"`
+	Scale           uint16 `db:"scale"`
 }
