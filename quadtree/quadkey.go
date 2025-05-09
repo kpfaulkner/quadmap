@@ -198,13 +198,17 @@ func (q QuadKey) GetMinMaxEquivForZoomLevel(zoom byte) (QuadKey, QuadKey, error)
 // GetAllAncestorsAndSelf returns all ancestors of given QuadKey
 // including the QuadKey itself
 func (q QuadKey) GetAllAncestorsAndSelf() []QuadKey {
-	var ancestors = []QuadKey{q}
+	zoom := q.Zoom()
+	var ancestors = make([]QuadKey, zoom)
+	ancestors[0] = q
+	i := 1
 	for {
 		parent, err := q.Parent()
 		if err != nil {
 			break
 		}
-		ancestors = append(ancestors, parent)
+		//ancestors = append(ancestors, parent)
+		ancestors[i] = parent
 		q = parent
 	}
 

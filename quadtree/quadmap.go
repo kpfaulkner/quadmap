@@ -307,16 +307,19 @@ func (qm *QuadMap) GetAllChildrenForQuadKeyAndZoom(qk QuadKey, tileType TileType
 
 // IsTileCoveredForSlippyCoordsAndTileTypeTopDown takes slippy coord, gets all ancestors to see if tile should exist
 // (by checking ancestors + full flag)
-func (qm *QuadMap) IsTileCoveredForSlippyCoordsAndTileTypeTopDown(x uint32, y uint32, z byte, tileType TileType) (bool, error) {
+// Also returns the quadkey that covers the co-ord... whether its the actual QK for the co-ordinates
+// or an ancestor that is full
+func (qm *QuadMap) IsTileCoveredForSlippyCoordsAndTileTypeTopDown(x uint32, y uint32, z byte, tileType TileType) (bool, QuadKey, error) {
 
 	quadKey, err := GenerateQuadKeyIndexFromSlippy(x, y, z)
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
 
-	allAncestors := quadKey.GetAllAncestorsAndSelf()
+	//allAncestors := quadKey.GetAllAncestorsAndSelf()
 
-	for _, qk := range allAncestors {
+	qk := quadKey
+	for {
 		qm.lock.RLock()
 		t, ok := qm.quadKeyMap[qk]
 		qm.lock.RUnlock()
@@ -325,16 +328,39 @@ func (qm *QuadMap) IsTileCoveredForSlippyCoordsAndTileTypeTopDown(x uint32, y ui
 			// if at target zoom level and match... then true
 			if t.QuadKey.Zoom() == z {
 				// have match... return true
-				return true, nil
+				return true, qk, nil
 			}
 
 			hasTileType, isFull := t.HasTileTypeAndFull(tileType)
 			if hasTileType && isFull {
-				return true, nil
+				return true, qk, nil
 			}
 		}
-
+		qk, err = qk.Parent()
+		if err != nil {
+			break
+		}
 	}
 
-	return false, nil
+	//for _, qk := range allAncestors {
+	//	qm.lock.RLock()
+	//	t, ok := qm.quadKeyMap[qk]
+	//	qm.lock.RUnlock()
+	//	if ok {
+	//
+	//		// if at target zoom level and match... then true
+	//		if t.QuadKey.Zoom() == z {
+	//			// have match... return true
+	//			return true, nil
+	//		}
+	//
+	//		hasTileType, isFull := t.HasTileTypeAndFull(tileType)
+	//		if hasTileType && isFull {
+	//			return true, nil
+	//		}
+	//	}
+	//
+	//}
+
+	return false, 0, nil
 }

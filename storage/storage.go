@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"strings"
+	_ "modernc.org/sqlite"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/kpfaulkner/quadmap/quadtree"
 	log "github.com/sirupsen/logrus"
-	_ "modernc.org/sqlite"
 )
 
 const (
@@ -96,6 +98,8 @@ func (s *Storage) BeginTxx() (*sqlx.Tx, error) {
 }
 
 func (s *Storage) CommitTxx(txx *sqlx.Tx) error {
+	s.dbLock.Lock()
+	defer s.dbLock.Unlock()
 	return txx.Commit()
 }
 
@@ -159,44 +163,55 @@ func (s *Storage) GetTile(qk quadtree.QuadKey) (*TileEntity, error) {
 	return &entity, nil
 }
 
-// SearchDetailsWithinQuadKey returns details for any hits within a particular QuadKey
 func (s *Storage) SearchDetailsWithinQuadKey(qk quadtree.QuadKey, includeSimpleBorder bool, limit int) ([]DetailsEntity, error) {
-
 	// get range of quadkeys to cover the entire tile. So convert to slippy... then get next tile
 	// to the right and down...
 	x1, y1, z1 := qk.SlippyCoords()
 	x2 := x1 + 1
-	y2 := y1 + 1
+	y2 := y1
 	qk2, err := quadtree.GenerateQuadKeyIndexFromSlippy(x2, y2, z1)
 	if err != nil {
 		return nil, err
 	}
+	return s.SearchDetailsBetweenQuadKeys(qk, qk2, includeSimpleBorder, limit)
+}
 
-	qkint64 := int64(qk)
+// SearchDetailsWithinQuadKey returns details for any hits within a particular QuadKey
+func (s *Storage) SearchDetailsBetweenQuadKeys(qk1 quadtree.QuadKey, qk2 quadtree.QuadKey, includeSimpleBorder bool, limit int) ([]DetailsEntity, error) {
+
+	qkint64 := int64(qk1)
 	qk2int64 := int64(qk2)
 	//var allKeys []int64
 	//s.db.Select(&allKeys, `select distinct details_id from quadmap qm where  qm.quadkey >= $1 AND qm.quadkey <= $2 limit 48;`, qkint64, qk2int64)
 
+	fmt.Printf("qk1 %d\n", qkint64)
+	fmt.Printf("qk2 %d\n", qk2int64)
+	fmt.Printf("Diff between qks %d\n", qk2-qk1)
 	var entities []DetailsEntity
 
-	tableName := s.GenerateTableName(qk)
+	tableName := s.GenerateTableName(qk1)
 	fmt.Printf("Searching table %s\n", tableName)
 	var statement string
 	if includeSimpleBorder {
-		statement = fmt.Sprintf("select d.id,d.scale,d.identifier, d.simple_border_wkb from details d where d.id in (select distinct details_id from %s qm where  qm.quadkey >= $1 AND qm.quadkey <= $2 ) limit $3;", tableName)
+		statement = fmt.Sprintf("select d.id,d.scale,d.identifier, d.simple_border_wkb from details d where d.id in (select distinct details_id from %s qm where  qm.quadkey >= $1 AND qm.quadkey < $2 ) limit $3;", tableName)
 	} else {
-		statement = fmt.Sprintf("select d.id,d.scale,d.identifier from details d where d.id in (select distinct details_id from %s qm where  qm.quadkey >= $1 AND qm.quadkey <= $2 ) limit $3;", tableName)
+		statement = fmt.Sprintf("select d.id,d.scale,d.identifier from details d where d.id in (select distinct details_id from %s qm where  qm.quadkey >= $1 AND qm.quadkey < $2 ) limit $3;", tableName)
 	}
 
 	fmt.Printf("statement %s\n", statement)
+	printStatement := strings.Replace(statement, "$1", fmt.Sprintf("%d", qkint64), -1)
+	printStatement = strings.Replace(printStatement, "$2", fmt.Sprintf("%d", qk2int64), -1)
+	printStatement = strings.Replace(printStatement, "$3", fmt.Sprintf("%d", limit), -1)
 
-	//s.db.Select(&entities, `select d.id,d.border,d.simple_border, d.tiletype, d.datetime,d.enabled,d.scale, d.identifier from quadmap qm join details d on qm.details_id = d.id where d.enabled = true AND qm.quadkey >= $1 AND qm.quadkey <= $2 group by d.id;`,		qkint64, qk2int64)
-	//s.db.Select(&entities, `select d.id,d.scale, d.identifier from quadmap qm join details d on qm.details_id = d.id where d.enabled = true AND qm.quadkey >= $1 AND qm.quadkey <= $2 group by d.id;`, qkint64, qk2int64)
-	//s.db.Select(&entities, `select d.id,d.scale, d.identifier from details d where d.id in (select distinct details_id from quadmap qm where  qm.quadkey >= $1 AND qm.quadkey <= $2 ) ;`, qkint64, qk2int64)
-	s.db.Select(&entities, statement, qkint64, qk2int64, limit)
-	//s.db.Select(&entities, `select d.id, d.scale, d.identifier from details d where d.id in (476,2948,5360,5572,6166,58,90,170,299,373,676,738,775,968,1046,1171,1265,1866,2240,2419,2531,2579,3002,3074,3081,3214,3314,3326,3334,3373,3421,3623,3788,3840,4454,4695,4726,4961,5072,5305,5354,5567,5588,5750,6069,6185,6201,6833,289,493,1604,2562,2727,3196,4561,6062,6648)`)
+	fmt.Printf("printStatement %s\n", printStatement)
+	//s.dbLock.Lock()
+	//defer s.dbLock.Unlock()
+	err := s.db.Select(&entities, statement, qkint64, qk2int64, limit)
+	if err != nil {
+		fmt.Printf("XXX err %+v\n", err)
+		return nil, err
+	}
 
-	//s.db.Select(&entities, `select d.id from details d where d.id in ($1) ;`, allKeys)
 	return entities, nil
 }
 
@@ -222,9 +237,8 @@ func (s *Storage) SearchQuadKeysWithinQuadKey(qk quadtree.QuadKey) ([]int64, err
 	fmt.Printf("Searching table %s\n", tableName)
 	statement := fmt.Sprintf("select distinct qm.details_id from %s qm where qm.quadkey >= $1 AND qm.quadkey <= $2;", tableName)
 
-	//s.db.Select(&entities, `select d.id,d.border,d.simple_border, d.tiletype, d.datetime,d.enabled,d.scale, d.identifier from quadmap qm join details d on qm.details_id = d.id where d.enabled = true AND qm.quadkey >= $1 AND qm.quadkey <= $2 group by d.id;`,		qkint64, qk2int64)
-	//s.db.Select(&entities, `select d.id,d.scale, d.identifier from quadmap qm join details d on qm.details_id = d.id where d.enabled = true AND qm.quadkey >= $1 AND qm.quadkey <= $2 group by d.id;`, qkint64, qk2int64)
-	//s.db.Select(&entities, `select d.id,d.scale, d.identifier from details d where d.id in (select distinct details_id from quadmap qm where  qm.quadkey >= $1 AND qm.quadkey <= $2 ) ;`, qkint64, qk2int64)
+	s.dbLock.Lock()
+	defer s.dbLock.Unlock()
 	s.db.Select(&entities, statement, qkint64, qk2int64)
 	return entities, nil
 }
