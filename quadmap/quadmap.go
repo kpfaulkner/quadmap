@@ -1,4 +1,4 @@
-package quadtree
+package quadmap
 
 import (
 	"errors"
@@ -19,7 +19,7 @@ var (
 // Will read as far as expandToLevel value (exclusive)
 type DataReader func(qm *QuadMap, data *[]byte, tileType TileType) error
 
-// QuadMap is a quadtree in disguise...
+// QuadMap is a quadmap in disguise...
 type QuadMap struct {
 
 	// map of quadkey to tile
@@ -32,7 +32,7 @@ type QuadMap struct {
 }
 
 // NewQuadMap create a new quadmap
-// Should provide a large initialCapacity when dealing with large quadtree structures
+// Should provide a large initialCapacity when dealing with large quadmap structures
 func NewQuadMap(initialCapacity int) *QuadMap {
 	return &QuadMap{
 		quadKeyMap: make(map[QuadKey]*Tile, initialCapacity),

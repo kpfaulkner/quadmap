@@ -3,12 +3,13 @@ package storage
 import (
 	"context"
 	"fmt"
-	"sync"
 	"strings"
+	"sync"
+
 	_ "modernc.org/sqlite"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/kpfaulkner/quadmap/quadtree"
+	"github.com/kpfaulkner/quadmap/quadmap"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -70,7 +71,7 @@ func (s *Storage) CreatePartitionTableIfNotExist(txx *sqlx.Tx, tableName string)
 // Currently the assumption is that the table name will be associated with an ancestor of the quadkey at level
 // 10. This is an attempt to find a sweet spot between performance and the number of tables.
 // If the provided quadkey is already smaller than 10, then the table name will be "quadmap_high".
-func (s *Storage) GenerateTableName(key quadtree.QuadKey) string {
+func (s *Storage) GenerateTableName(key quadmap.QuadKey) string {
 
 	targetKey := key
 	zoom := targetKey.Zoom()
@@ -155,7 +156,7 @@ func (s *Storage) GetAllDetails() ([]DetailsEntity, error) {
 	return entities, nil
 }
 
-func (s *Storage) GetTile(qk quadtree.QuadKey) (*TileEntity, error) {
+func (s *Storage) GetTile(qk quadmap.QuadKey) (*TileEntity, error) {
 	s.dbLock.Lock()
 	defer s.dbLock.Unlock()
 	var entity TileEntity
@@ -163,13 +164,13 @@ func (s *Storage) GetTile(qk quadtree.QuadKey) (*TileEntity, error) {
 	return &entity, nil
 }
 
-func (s *Storage) SearchDetailsWithinQuadKey(qk quadtree.QuadKey, includeSimpleBorder bool, limit int) ([]DetailsEntity, error) {
+func (s *Storage) SearchDetailsWithinQuadKey(qk quadmap.QuadKey, includeSimpleBorder bool, limit int) ([]DetailsEntity, error) {
 	// get range of quadkeys to cover the entire tile. So convert to slippy... then get next tile
 	// to the right and down...
 	x1, y1, z1 := qk.SlippyCoords()
 	x2 := x1 + 1
 	y2 := y1
-	qk2, err := quadtree.GenerateQuadKeyIndexFromSlippy(x2, y2, z1)
+	qk2, err := quadmap.GenerateQuadKeyIndexFromSlippy(x2, y2, z1)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +178,7 @@ func (s *Storage) SearchDetailsWithinQuadKey(qk quadtree.QuadKey, includeSimpleB
 }
 
 // SearchDetailsWithinQuadKey returns details for any hits within a particular QuadKey
-func (s *Storage) SearchDetailsBetweenQuadKeys(qk1 quadtree.QuadKey, qk2 quadtree.QuadKey, includeSimpleBorder bool, limit int) ([]DetailsEntity, error) {
+func (s *Storage) SearchDetailsBetweenQuadKeys(qk1 quadmap.QuadKey, qk2 quadmap.QuadKey, includeSimpleBorder bool, limit int) ([]DetailsEntity, error) {
 
 	qkint64 := int64(qk1)
 	qk2int64 := int64(qk2)
@@ -204,8 +205,8 @@ func (s *Storage) SearchDetailsBetweenQuadKeys(qk1 quadtree.QuadKey, qk2 quadtre
 	printStatement = strings.Replace(printStatement, "$3", fmt.Sprintf("%d", limit), -1)
 
 	fmt.Printf("printStatement %s\n", printStatement)
-	//s.dbLock.Lock()
-	//defer s.dbLock.Unlock()
+	s.dbLock.Lock()
+	defer s.dbLock.Unlock()
 	err := s.db.Select(&entities, statement, qkint64, qk2int64, limit)
 	if err != nil {
 		fmt.Printf("XXX err %+v\n", err)
@@ -215,14 +216,14 @@ func (s *Storage) SearchDetailsBetweenQuadKeys(qk1 quadtree.QuadKey, qk2 quadtre
 	return entities, nil
 }
 
-func (s *Storage) SearchQuadKeysWithinQuadKey(qk quadtree.QuadKey) ([]int64, error) {
+func (s *Storage) SearchQuadKeysWithinQuadKey(qk quadmap.QuadKey) ([]int64, error) {
 
 	// get range of quadkeys to cover the entire tile. So convert to slippy... then get next tile
 	// to the right and down...
 	x1, y1, z1 := qk.SlippyCoords()
 	x2 := x1 + 1
 	y2 := y1 + 1
-	qk2, err := quadtree.GenerateQuadKeyIndexFromSlippy(x2, y2, z1)
+	qk2, err := quadmap.GenerateQuadKeyIndexFromSlippy(x2, y2, z1)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +259,7 @@ func (s *Storage) HasIdentifier(identifier string) bool {
 	var existingIdentifier []string
 	err := s.db.Select(&existingIdentifier, `SELECT identifier  FROM processed WHERE identifier = $1`, identifier)
 	if err != nil {
-		log.Errorf("error checking for identifier", err)
+		log.Errorf("error checking for identifier %v", err)
 		return false
 	}
 	return len(existingIdentifier) > 0

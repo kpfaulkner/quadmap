@@ -1,4 +1,4 @@
-package quadtree
+package quadmap
 
 // QuadKeyRange is a range containing QuadKeys.
 type QuadKeyRange struct {

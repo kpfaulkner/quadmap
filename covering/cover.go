@@ -4,12 +4,12 @@ import (
 	"container/heap"
 	"sort"
 
-	"github.com/kpfaulkner/quadmap/quadtree"
+	"github.com/kpfaulkner/quadmap/quadmap"
 	"github.com/peterstace/simplefeatures/geom"
 )
 
 type coveringTile struct {
-	qk quadtree.QuadKey
+	qk quadmap.QuadKey
 	// area of the tile that lies outside the geometry
 	outsideArea float64
 }
@@ -32,7 +32,7 @@ func (pq *priorityQueue) Pop() any {
 	return x
 }
 
-func intersection(qk quadtree.QuadKey, g geom.Geometry) (coveringTile, bool, error) {
+func intersection(qk quadmap.QuadKey, g geom.Geometry) (coveringTile, bool, error) {
 	tileEnv, err := qk.Envelope()
 	if err != nil {
 		return coveringTile{}, false, err
@@ -51,7 +51,7 @@ func intersection(qk quadtree.QuadKey, g geom.Geometry) (coveringTile, bool, err
 // ExteriorCovering returns a set of QuadKeys that approximates a Geometry
 // with no more than maxTiles keys. The covering fully covers the geometry,
 // but may also include some area outside it.
-func ExteriorCovering(g geom.Geometry, maxTiles int) ([]quadtree.QuadKey, error) { // TODO: minZoom
+func ExteriorCovering(g geom.Geometry, maxTiles int) ([]quadmap.QuadKey, error) { // TODO: minZoom
 	score, ok, err := intersection(0, g)
 	if err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func ExteriorCovering(g geom.Geometry, maxTiles int) ([]quadtree.QuadKey, error)
 			heap.Push(&pq, cell)
 			break
 		}
-		if _, _, z := cell.qk.SlippyCoords(); z >= quadtree.MaxZoom {
+		if _, _, z := cell.qk.SlippyCoords(); z >= quadmap.MaxZoom {
 			heap.Push(&pq, cell)
 			break
 		}
@@ -89,13 +89,13 @@ func ExteriorCovering(g geom.Geometry, maxTiles int) ([]quadtree.QuadKey, error)
 			heap.Push(&pq, c)
 		}
 	}
-	cover := make([]quadtree.QuadKey, len(pq))
+	cover := make([]quadmap.QuadKey, len(pq))
 	for i, c := range pq {
 		cover[i] = c.qk
 	}
 	return cover, nil
 }
-func ExteriorCoveringNoMax(g geom.Geometry) ([]quadtree.QuadKey, error) { // TODO: minZoom
+func ExteriorCoveringNoMax(g geom.Geometry) ([]quadmap.QuadKey, error) { // TODO: minZoom
 	score, ok, err := intersection(0, g)
 	if err != nil {
 		return nil, err
@@ -133,15 +133,15 @@ func ExteriorCoveringNoMax(g geom.Geometry) ([]quadtree.QuadKey, error) { // TOD
 			heap.Push(&pq, c)
 		}
 	}
-	cover := make([]quadtree.QuadKey, len(pq))
+	cover := make([]quadmap.QuadKey, len(pq))
 	for i, c := range pq {
 		cover[i] = c.qk
 	}
 	return cover, nil
 }
 
-func AllAncestors(quadKeys []quadtree.QuadKey, minZoom byte) ([]quadtree.QuadKey, error) {
-	seen := make(map[quadtree.QuadKey]bool)
+func AllAncestors(quadKeys []quadmap.QuadKey, minZoom byte) ([]quadmap.QuadKey, error) {
+	seen := make(map[quadmap.QuadKey]bool)
 	for _, qk := range quadKeys {
 		for {
 			if qk.Zoom() <= minZoom {
@@ -158,7 +158,7 @@ func AllAncestors(quadKeys []quadtree.QuadKey, minZoom byte) ([]quadtree.QuadKey
 			seen[qk] = true
 		}
 	}
-	ancestors := make([]quadtree.QuadKey, 0, len(seen))
+	ancestors := make([]quadmap.QuadKey, 0, len(seen))
 	for c := range seen {
 		ancestors = append(ancestors, c)
 	}
@@ -171,13 +171,13 @@ func AllAncestors(quadKeys []quadtree.QuadKey, minZoom byte) ([]quadtree.QuadKey
 // Note: these ranges also find a small number of keys outside those tiles (see
 // the note in QuadKey.Range()). Use QuadKey.IsAncestorOf() to filter those out
 // of the results.
-func SearchRanges(quadKeys []quadtree.QuadKey, minZoom byte) ([]quadtree.QuadKeyRange, error) {
+func SearchRanges(quadKeys []quadmap.QuadKey, minZoom byte) ([]quadmap.QuadKeyRange, error) {
 	ancestors, err := AllAncestors(quadKeys, minZoom)
 	if err != nil {
 		return nil, err
 	}
 
-	ranges := make([]quadtree.QuadKeyRange, 0, len(quadKeys)+len(ancestors))
+	ranges := make([]quadmap.QuadKeyRange, 0, len(quadKeys)+len(ancestors))
 	for _, qk := range quadKeys {
 		ranges = append(ranges, qk.Range())
 	}

@@ -1,4 +1,4 @@
-package quadtree
+package quadmap
 
 type TileType uint16
 
@@ -12,7 +12,7 @@ const (
 	TileTypeOffset = 10
 )
 
-// Tile is a node within a quadtree.
+// Tile is a node within a quadmap.
 // Although a Tile instance will only be in the quadmap once (for a given quadkey) it may
 // contain a key used to look up specifics for the quadkey in SQLite.
 type Tile struct {
