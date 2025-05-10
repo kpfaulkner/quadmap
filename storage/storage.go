@@ -33,7 +33,7 @@ func NewStorage(dbName string) (*Storage, error) {
 	// table
 	//db.MustExec(`create table if not exists quadmap (id integer primary key, quadkey integer , details_mask integer, details_id integer)`)
 	db.MustExec(`create table if not exists details (id integer primary key, border varchar(500000),simple_border varchar(500000), simple_border_wkb blob, tiletype integer, datetime integer, scale integer, identifier varchar(50), enabled bool)`)
-	db.MustExec(`create table if not exists processed (id integer primary key, identifier varchar(50))`)
+	db.MustExec(`create table if not exists processed (id integer primary key, identifier varchar(50),  tiletype integer)`)
 	//db.MustExec(`create index if not exists quadmap_index on quadmap(quadkey)`)
 	db.MustExec(`create index if not exists details_index on details(id)`)
 
@@ -164,7 +164,7 @@ func (s *Storage) GetTile(qk quadmap.QuadKey) (*TileEntity, error) {
 	return &entity, nil
 }
 
-func (s *Storage) SearchDetailsWithinQuadKey(qk quadmap.QuadKey, includeSimpleBorder bool, limit int) ([]DetailsEntity, error) {
+func (s *Storage) SearchDetailsWithinQuadKey(qk quadmap.QuadKey, tileTypes []quadmap.TileType, includeSimpleBorder bool, limit int) ([]DetailsEntity, error) {
 	// get range of quadkeys to cover the entire tile. So convert to slippy... then get next tile
 	// to the right and down...
 	x1, y1, z1 := qk.SlippyCoords()
@@ -174,11 +174,11 @@ func (s *Storage) SearchDetailsWithinQuadKey(qk quadmap.QuadKey, includeSimpleBo
 	if err != nil {
 		return nil, err
 	}
-	return s.SearchDetailsBetweenQuadKeys(qk, qk2, includeSimpleBorder, limit)
+	return s.SearchDetailsBetweenQuadKeys(qk, qk2, tileTypes, includeSimpleBorder, limit)
 }
 
 // SearchDetailsWithinQuadKey returns details for any hits within a particular QuadKey
-func (s *Storage) SearchDetailsBetweenQuadKeys(qk1 quadmap.QuadKey, qk2 quadmap.QuadKey, includeSimpleBorder bool, limit int) ([]DetailsEntity, error) {
+func (s *Storage) SearchDetailsBetweenQuadKeys(qk1 quadmap.QuadKey, qk2 quadmap.QuadKey, tileTypes []quadmap.TileType, includeSimpleBorder bool, limit int) ([]DetailsEntity, error) {
 
 	qkint64 := int64(qk1)
 	qk2int64 := int64(qk2)
@@ -190,13 +190,15 @@ func (s *Storage) SearchDetailsBetweenQuadKeys(qk1 quadmap.QuadKey, qk2 quadmap.
 	fmt.Printf("Diff between qks %d\n", qk2-qk1)
 	var entities []DetailsEntity
 
+	// used to help filter out unwanted tile types.
+	detailsQuery := generateTileTypesQuery(tileTypes)
 	tableName := s.GenerateTableName(qk1)
 	fmt.Printf("Searching table %s\n", tableName)
 	var statement string
 	if includeSimpleBorder {
-		statement = fmt.Sprintf("select d.id,d.scale,d.identifier, d.simple_border_wkb from details d where d.id in (select distinct details_id from %s qm where  qm.quadkey >= $1 AND qm.quadkey < $2 ) limit $3;", tableName)
+		statement = fmt.Sprintf("select d.id,d.scale,d.identifier, d.simple_border_wkb from details d where d.id in (select distinct details_id from %s qm where  qm.quadkey >= $1 AND qm.quadkey < $2 AND details_mask in (%s) ) limit $3;", tableName, detailsQuery)
 	} else {
-		statement = fmt.Sprintf("select d.id,d.scale,d.identifier from details d where d.id in (select distinct details_id from %s qm where  qm.quadkey >= $1 AND qm.quadkey < $2 ) limit $3;", tableName)
+		statement = fmt.Sprintf("select d.id,d.scale,d.identifier from details d where d.id in (select distinct details_id from %s qm where  qm.quadkey >= $1 AND qm.quadkey < $2 AND details_mask in (%s)) limit $3;", tableName, detailsQuery)
 	}
 
 	fmt.Printf("statement %s\n", statement)
@@ -214,6 +216,22 @@ func (s *Storage) SearchDetailsBetweenQuadKeys(qk1 quadmap.QuadKey, qk2 quadmap.
 	}
 
 	return entities, nil
+}
+
+// generates query string for filtering by tile types.
+func generateTileTypesQuery(types []quadmap.TileType) string {
+
+	var conditions []string
+
+	for _, t := range types {
+		v := t << quadmap.TileTypeOffset
+		conditions = append(conditions, fmt.Sprintf("%d", v))
+		v = v | t
+		conditions = append(conditions, fmt.Sprintf("%d", v))
+	}
+
+	query := strings.Join(conditions, " , ")
+	return query
 }
 
 func (s *Storage) SearchQuadKeysWithinQuadKey(qk quadmap.QuadKey) ([]int64, error) {
@@ -244,20 +262,20 @@ func (s *Storage) SearchQuadKeysWithinQuadKey(qk quadmap.QuadKey) ([]int64, erro
 	return entities, nil
 }
 
-func (s *Storage) InsertIdentifier(identifier string) error {
+func (s *Storage) InsertIdentifier(identifier string, tileType quadmap.TileType) error {
 	s.dbLock.Lock()
 	defer s.dbLock.Unlock()
-	s.db.MustExec(`INSERT INTO processed ( identifier ) VALUES ($1);`, identifier)
+	s.db.MustExec(`INSERT INTO processed ( identifier, tiletype ) VALUES ($1, $2);`, identifier, tileType)
 
 	return nil
 }
 
-func (s *Storage) HasIdentifier(identifier string) bool {
+func (s *Storage) HasIdentifier(identifier string, tileType quadmap.TileType) bool {
 
 	s.dbLock.Lock()
 	defer s.dbLock.Unlock()
 	var existingIdentifier []string
-	err := s.db.Select(&existingIdentifier, `SELECT identifier  FROM processed WHERE identifier = $1`, identifier)
+	err := s.db.Select(&existingIdentifier, `SELECT identifier  FROM processed WHERE identifier = $1 AND tiletype = $2`, identifier, tileType)
 	if err != nil {
 		log.Errorf("error checking for identifier %v", err)
 		return false
