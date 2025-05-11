@@ -182,18 +182,11 @@ func (s *Storage) SearchDetailsBetweenQuadKeys(qk1 quadmap.QuadKey, qk2 quadmap.
 
 	qkint64 := int64(qk1)
 	qk2int64 := int64(qk2)
-	//var allKeys []int64
-	//s.db.Select(&allKeys, `select distinct details_id from quadmap qm where  qm.quadkey >= $1 AND qm.quadkey <= $2 limit 48;`, qkint64, qk2int64)
-
-	fmt.Printf("qk1 %d\n", qkint64)
-	fmt.Printf("qk2 %d\n", qk2int64)
-	fmt.Printf("Diff between qks %d\n", qk2-qk1)
 	var entities []DetailsEntity
 
 	// used to help filter out unwanted tile types.
 	detailsQuery := generateTileTypesQuery(tileTypes)
 	tableName := s.GenerateTableName(qk1)
-	fmt.Printf("Searching table %s\n", tableName)
 	var statement string
 	if includeSimpleBorder {
 		statement = fmt.Sprintf("select d.id,d.scale,d.identifier, d.simple_border_wkb from details d where d.id in (select distinct details_id from %s qm where  qm.quadkey >= $1 AND qm.quadkey < $2 AND details_mask in (%s) ) limit $3;", tableName, detailsQuery)
@@ -201,17 +194,10 @@ func (s *Storage) SearchDetailsBetweenQuadKeys(qk1 quadmap.QuadKey, qk2 quadmap.
 		statement = fmt.Sprintf("select d.id,d.scale,d.identifier from details d where d.id in (select distinct details_id from %s qm where  qm.quadkey >= $1 AND qm.quadkey < $2 AND details_mask in (%s)) limit $3;", tableName, detailsQuery)
 	}
 
-	fmt.Printf("statement %s\n", statement)
-	printStatement := strings.Replace(statement, "$1", fmt.Sprintf("%d", qkint64), -1)
-	printStatement = strings.Replace(printStatement, "$2", fmt.Sprintf("%d", qk2int64), -1)
-	printStatement = strings.Replace(printStatement, "$3", fmt.Sprintf("%d", limit), -1)
-
-	fmt.Printf("printStatement %s\n", printStatement)
 	s.dbLock.Lock()
 	defer s.dbLock.Unlock()
 	err := s.db.Select(&entities, statement, qkint64, qk2int64, limit)
 	if err != nil {
-		fmt.Printf("XXX err %+v\n", err)
 		return nil, err
 	}
 
