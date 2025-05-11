@@ -3,11 +3,13 @@ package quadmap
 type TileType uint16
 
 const (
-	TileTypeVert  TileType = 0b000000000001
-	TileTypeEast  TileType = 0b000000000010
-	TileTypeNorth TileType = 0b000000000100
-	TileTypeSouth TileType = 0b00000001000
-	TileTypeWest  TileType = 0b0000010000
+	TileTypeVert      TileType = 0b000000000001
+	TileTypeEast      TileType = 0b000000000010
+	TileTypeNorth     TileType = 0b000000000100
+	TileTypeSouth     TileType = 0b00000001000
+	TileTypeWest      TileType = 0b0000010000
+	TileTypeTrueOrtho TileType = 0b0000100000
+	TileTypeDSM       TileType = 0b0001000000
 
 	TileTypeOffset = 10
 )
