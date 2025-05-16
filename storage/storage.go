@@ -37,7 +37,7 @@ func NewStorage(dbName string) (*Storage, error) {
 	//db.MustExec(`create index if not exists quadmap_index on quadmap(quadkey)`)
 	db.MustExec(`create index if not exists details_index on details(id)`)
 
-	_, err = db.Exec(`PRAGMA cache_size = -1000000`)
+	_, err = db.Exec(`PRAGMA cache_size = -1000000000`)
 	if err != nil {
 		log.Errorf("error setting cache size %s", err)
 		return nil, err
@@ -189,13 +189,13 @@ func (s *Storage) SearchDetailsBetweenQuadKeys(qk1 quadmap.QuadKey, qk2 quadmap.
 	tableName := s.GenerateTableName(qk1)
 	var statement string
 	if includeSimpleBorder {
-		statement = fmt.Sprintf("select d.id,d.scale,d.identifier, d.simple_border_wkb from details d where d.id in (select distinct details_id from %s qm where  qm.quadkey >= $1 AND qm.quadkey < $2 AND details_mask in (%s) ) limit $3;", tableName, detailsQuery)
+		statement = fmt.Sprintf("select d.id,d.scale,d.identifier, d.tiletype, d.simple_border_wkb from details d where d.id in (select distinct details_id from %s qm where  qm.quadkey >= $1 AND qm.quadkey < $2 AND details_mask in (%s) ) limit $3;", tableName, detailsQuery)
 	} else {
-		statement = fmt.Sprintf("select d.id,d.scale,d.identifier from details d where d.id in (select distinct details_id from %s qm where  qm.quadkey >= $1 AND qm.quadkey < $2 AND details_mask in (%s)) limit $3;", tableName, detailsQuery)
+		statement = fmt.Sprintf("select d.id,d.scale,d.identifier,d.tiletype  from details d where d.id in (select distinct details_id from %s qm where  qm.quadkey >= $1 AND qm.quadkey < $2 AND details_mask in (%s)) limit $3;", tableName, detailsQuery)
 	}
 
-	s.dbLock.Lock()
-	defer s.dbLock.Unlock()
+	//s.dbLock.Lock()
+	//defer s.dbLock.Unlock()
 	err := s.db.Select(&entities, statement, qkint64, qk2int64, limit)
 	if err != nil {
 		return nil, err
