@@ -95,7 +95,7 @@ func ExteriorCovering(g geom.Geometry, maxTiles int) ([]quadmap.QuadKey, error) 
 	}
 	return cover, nil
 }
-func ExteriorCoveringNoMax(g geom.Geometry) ([]quadmap.QuadKey, error) { // TODO: minZoom
+func ExteriorCoveringNoMax(g geom.Geometry, minZoom uint8) ([]quadmap.QuadKey, error) {
 	score, ok, err := intersection(0, g)
 	if err != nil {
 		return nil, err
@@ -110,7 +110,7 @@ func ExteriorCoveringNoMax(g geom.Geometry) ([]quadmap.QuadKey, error) { // TODO
 			heap.Push(&pq, cell)
 			break
 		}
-		if _, _, z := cell.qk.SlippyCoords(); z >= 22 {
+		if _, _, z := cell.qk.SlippyCoords(); z >= minZoom {
 			heap.Push(&pq, cell)
 			break
 		}

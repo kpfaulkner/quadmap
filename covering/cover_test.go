@@ -136,6 +136,70 @@ func TestExternalCovering(t *testing.T) {
 	}
 }
 
+func TestExteriorCoveringNoMax(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		wkt      string
+		maxCells int
+		expect   []quadmap.QuadKey
+	}{
+
+		{
+			name:     "Bit of Sydney",
+			wkt:      `POLYGON ((151.20470582124346 -33.86124393444445, 151.20470582124346 -33.87012876380132, 151.2161659262223 -33.87012876380132, 151.2161659262223 -33.86124393444445, 151.20470582124346 -33.86124393444445))`,
+			maxCells: 20,
+			expect: []quadmap.QuadKey{
+				0xd6c0000000000005,
+				0xd640000000000005,
+				0xd430000000000006,
+				0xd480000000000005,
+				0xd680000000000005,
+				0xdc40000000000006,
+				0xd4c0000000000006,
+				0xd190000000000006,
+				0xd3d0000000000006,
+				0xd3c0000000000006,
+				0xd1b0000000000006,
+				0xd600000000000005,
+				0xd340000000000005,
+				0xd1c0000000000005,
+				0xd4e0000000000006,
+				0xdc10000000000006,
+				0xd1a0000000000006,
+				0xd300000000000005,
+				0xd380000000000006,
+				0xd390000000000006,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g, err := geom.UnmarshalWKT(tc.wkt)
+			require.NoError(t, err)
+
+			cov, err := ExteriorCoveringNoMax(g, 20)
+
+			var alsoChildren []quadmap.QuadKey
+			for _, qk := range cov {
+				z := qk.Zoom()
+				if z < 20 {
+					allKids := qk.GetAllChildrenAtZoom(20)
+					alsoChildren = append(alsoChildren, allKids...)
+				} else {
+					alsoChildren = append(alsoChildren, qk)
+				}
+			}
+
+			for _, qk := range alsoChildren {
+				x, y, z := qk.SlippyCoords()
+				fmt.Printf("x: %d, y: %d, z: %d\n", x, y, z)
+			}
+
+			require.NoError(t, err)
+			assert.ElementsMatch(t, tc.expect, cov)
+		})
+	}
+}
+
 func TestSearchRanges(t *testing.T) {
 	for _, tc := range []struct {
 		name    string

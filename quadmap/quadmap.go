@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"sync"
 	"sort"
+	"sync"
 )
 
 var (
@@ -23,7 +23,7 @@ type DataReader func(qm *QuadMap, data *[]byte, tileType TileType) error
 type QuadMap struct {
 
 	// map of quadkey to tile
-	quadKeyMap map[QuadKey]*Tile
+	QuadKeyMap map[QuadKey]*Tile
 
 	// function able to take byte slices and populate Quadmap.
 	dataReader DataReader
@@ -35,7 +35,7 @@ type QuadMap struct {
 // Should provide a large initialCapacity when dealing with large quadmap structures
 func NewQuadMap(initialCapacity int) *QuadMap {
 	return &QuadMap{
-		quadKeyMap: make(map[QuadKey]*Tile, initialCapacity),
+		QuadKeyMap: make(map[QuadKey]*Tile, initialCapacity),
 	}
 }
 
@@ -47,9 +47,9 @@ func (qm *QuadMap) SetDataReader(dr DataReader) {
 
 func (qm *QuadMap) GetAllTiles(sorted bool) ([]*Tile, error) {
 
-	allTiles := make([]*Tile, len(qm.quadKeyMap))
+	allTiles := make([]*Tile, len(qm.QuadKeyMap))
 	i := 0
-	for _, tile := range qm.quadKeyMap {
+	for _, tile := range qm.QuadKeyMap {
 		allTiles[i] = tile
 		i++
 	}
@@ -72,7 +72,7 @@ func (qm *QuadMap) GetParentTile(t *Tile) (*Tile, error) {
 	}
 
 	qm.lock.RLock()
-	parentTile, ok := qm.quadKeyMap[parentKey]
+	parentTile, ok := qm.QuadKeyMap[parentKey]
 	qm.lock.RUnlock()
 
 	if !ok {
@@ -89,7 +89,7 @@ func (qm *QuadMap) GetChildInPos(t *Tile, pos int) (*Tile, error) {
 		return nil, err
 	}
 	qm.lock.RLock()
-	childTile, ok := qm.quadKeyMap[childKey]
+	childTile, ok := qm.QuadKeyMap[childKey]
 	qm.lock.RUnlock()
 
 	if !ok {
@@ -132,7 +132,7 @@ func (qm *QuadMap) GetExactTileForQuadKey(quadKey QuadKey) (*Tile, error) {
 	defer qm.lock.RUnlock()
 
 	// if actual quadkey exists, return tile.
-	if t, ok := qm.quadKeyMap[quadKey]; ok {
+	if t, ok := qm.QuadKeyMap[quadKey]; ok {
 		return t, nil
 	}
 	return nil, TileNotFoundError
@@ -146,7 +146,7 @@ func (qm *QuadMap) GetExactTileForQuadKey(quadKey QuadKey) (*Tile, error) {
 // information somewhere. Although for the limited test cases so far it's pretty much instant
 func (qm *QuadMap) NumberOfTilesForZoom(zoom byte) int {
 	count := 0
-	for _, t := range qm.quadKeyMap {
+	for _, t := range qm.QuadKeyMap {
 		if t.QuadKey.Zoom() == zoom {
 			count++
 		}
@@ -160,7 +160,7 @@ func (qm *QuadMap) GetTilesForTypeAndZoom(tt TileType, zoom byte) []*Tile {
 
 	qm.lock.RLock()
 	defer qm.lock.RUnlock()
-	for _, t := range qm.quadKeyMap {
+	for _, t := range qm.QuadKeyMap {
 		if t.QuadKey.Zoom() == zoom && t.HasTileType(tt) {
 			tiles = append(tiles, t)
 		}
@@ -170,14 +170,14 @@ func (qm *QuadMap) GetTilesForTypeAndZoom(tt TileType, zoom byte) []*Tile {
 
 // NumberOfTiles returns number of tiles in quadmap
 func (qm *QuadMap) NumberOfTiles() int {
-	return len(qm.quadKeyMap)
+	return len(qm.QuadKeyMap)
 }
 
 // AddTile adds a pre-generated tile (which has its quadkey already)
 func (qm *QuadMap) AddTile(t *Tile) error {
 	qm.lock.Lock()
 	defer qm.lock.Unlock()
-	qm.quadKeyMap[t.QuadKey] = t
+	qm.QuadKeyMap[t.QuadKey] = t
 	return nil
 }
 
@@ -193,7 +193,7 @@ func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z byte, tileType
 	defer qm.lock.Unlock()
 
 	// check if child exists.
-	if tile, ok := qm.quadKeyMap[quadKey]; ok {
+	if tile, ok := qm.QuadKeyMap[quadKey]; ok {
 		tile.AddTileType(tileType, full)
 		return tile, nil
 	}
@@ -203,7 +203,7 @@ func (qm *QuadMap) CreateTileAtSlippyCoords(x uint32, y uint32, z byte, tileType
 		return nil, err
 	}
 
-	qm.quadKeyMap[t.QuadKey] = t
+	qm.QuadKeyMap[t.QuadKey] = t
 	return t, nil
 }
 
@@ -225,7 +225,7 @@ func (qm *QuadMap) GetSlippyBoundsForTileTypeAndZoom(tileType TileType, zoom byt
 	var maxX uint32 = 0
 	var maxY uint32 = 0
 
-	for quadKey, v := range qm.quadKeyMap {
+	for quadKey, v := range qm.QuadKeyMap {
 
 		if quadKey == 0 {
 			continue // should this be in the quadMap at all?
@@ -321,7 +321,7 @@ func (qm *QuadMap) IsTileCoveredForSlippyCoordsAndTileTypeTopDown(x uint32, y ui
 	qk := quadKey
 	for {
 		qm.lock.RLock()
-		t, ok := qm.quadKeyMap[qk]
+		t, ok := qm.QuadKeyMap[qk]
 		qm.lock.RUnlock()
 		if ok {
 
@@ -344,7 +344,7 @@ func (qm *QuadMap) IsTileCoveredForSlippyCoordsAndTileTypeTopDown(x uint32, y ui
 
 	//for _, qk := range allAncestors {
 	//	qm.lock.RLock()
-	//	t, ok := qm.quadKeyMap[qk]
+	//	t, ok := qm.QuadKeyMap[qk]
 	//	qm.lock.RUnlock()
 	//	if ok {
 	//
