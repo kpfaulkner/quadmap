@@ -182,7 +182,7 @@ func TestExteriorCoveringNoMax(t *testing.T) {
 			for _, qk := range cov {
 				z := qk.Zoom()
 				if z < 20 {
-					allKids := qk.GetAllChildrenAtZoom(20)
+					allKids := qk.GetAllPossibleChildrenAtZoom(20)
 					alsoChildren = append(alsoChildren, allKids...)
 				} else {
 					alsoChildren = append(alsoChildren, qk)

@@ -210,34 +210,26 @@ func (q QuadKey) GetAllAncestorsAndSelf() []QuadKey {
 
 // GetAllPossibleChildrenAtZoom returns all children QuadKeys of given QuadKey at given zoom level
 // This returns all children QuadKeys even if the child itself doesn't exist. (ie doesn't check full flag)
+// Results are in Morton (recursive child-order) traversal order.
 func (q QuadKey) GetAllPossibleChildrenAtZoom(maxZoom byte) []QuadKey {
-	var allQuadKeys []QuadKey
-	if q.Zoom() >= maxZoom {
+	qz := q.Zoom()
+	if qz >= maxZoom {
 		return []QuadKey{q}
 	}
 
-	children := q.Children()
-	for _, child := range children {
-		quadKeys := child.GetAllPossibleChildrenAtZoom(maxZoom)
-		allQuadKeys = append(allQuadKeys, quadKeys...)
+	// A descendant of q at maxZoom shares q's tile bits and adds 2*delta
+	// position bits in positions [64-2*maxZoom, 64-2*qz - 1]. Enumerating
+	// those bits from 0..4^delta-1 yields the same order as the recursive
+	// Children()-based walk, so we can fill the slice in one pass.
+	delta := maxZoom - qz
+	count := uint64(1) << (2 * delta)
+	stripZoom := uint64(q) &^ uint64(zoomMask)
+	shift := 64 - 2*uint64(maxZoom)
+	tz := uint64(maxZoom)
+
+	result := make([]QuadKey, count)
+	for i := uint64(0); i < count; i++ {
+		result[i] = QuadKey(stripZoom | (i << shift) | tz)
 	}
-
-	return allQuadKeys
-}
-
-// GetAllChildrenAtZoom returns all children QuadKeys of given QuadKey at a given zoom level. Checks
-// full flag
-func (q QuadKey) GetAllChildrenAtZoom(maxZoom byte) []QuadKey {
-	var allQuadKeys []QuadKey
-	if q.Zoom() >= maxZoom {
-		return []QuadKey{q}
-	}
-
-	children := q.Children()
-	for _, child := range children {
-		quadKeys := child.GetAllPossibleChildrenAtZoom(maxZoom)
-		allQuadKeys = append(allQuadKeys, quadKeys...)
-	}
-
-	return allQuadKeys
+	return result
 }
