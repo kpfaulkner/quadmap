@@ -37,6 +37,21 @@ func NewStorage(dbName string) (*Storage, error) {
 	//db.MustExec(`create index if not exists quadmap_index on quadmap(quadkey)`)
 	db.MustExec(`create index if not exists details_index on details(id)`)
 
+	// WAL lets readers run concurrently with a single writer, which is what
+	// allows us to drop the dbLock from read paths below. busy_timeout makes
+	// writers wait briefly for the lock instead of returning SQLITE_BUSY.
+	_, err = db.Exec(`PRAGMA journal_mode = WAL`)
+	if err != nil {
+		log.Errorf("error enabling WAL %s", err)
+		return nil, err
+	}
+
+	_, err = db.Exec(`PRAGMA busy_timeout = 5000`)
+	if err != nil {
+		log.Errorf("error setting busy_timeout %s", err)
+		return nil, err
+	}
+
 	_, err = db.Exec(`PRAGMA cache_size = -1000000000`)
 	if err != nil {
 		log.Errorf("error setting cache size %s", err)
@@ -141,24 +156,18 @@ func (s *Storage) UpdateDetails(details DetailsEntity) error {
 }
 
 func (s *Storage) GetDetails(id int) (*DetailsEntity, error) {
-	s.dbLock.Lock()
-	defer s.dbLock.Unlock()
 	var entity DetailsEntity
 	s.db.Select(&entity, `SELECT id, border, simple_border, tiletype, datetime, scale, identifier, simple_border_wkb FROM details WHERE enabled = true AND id = $1`, fmt.Sprintf("%d", id))
 	return &entity, nil
 }
 
 func (s *Storage) GetAllDetails() ([]DetailsEntity, error) {
-	s.dbLock.Lock()
-	defer s.dbLock.Unlock()
 	var entities []DetailsEntity
 	s.db.Select(&entities, `SELECT id, border, simple_border, tiletype, datetime, scale, identifier, simple_border_wkb FROM details WHERE enabled = true`)
 	return entities, nil
 }
 
 func (s *Storage) GetTile(qk quadmap.QuadKey) (*TileEntity, error) {
-	s.dbLock.Lock()
-	defer s.dbLock.Unlock()
 	var entity TileEntity
 	s.db.Select(&entity, `SELECT quadkey,detail_mask  FROM quadmap WHERE quadkey = $1`, fmt.Sprintf("%d", qk))
 	return &entity, nil
@@ -242,8 +251,6 @@ func (s *Storage) SearchQuadKeysWithinQuadKey(qk quadmap.QuadKey) ([]int64, erro
 	fmt.Printf("Searching table %s\n", tableName)
 	statement := fmt.Sprintf("select distinct qm.details_id from %s qm where qm.quadkey >= $1 AND qm.quadkey <= $2;", tableName)
 
-	s.dbLock.Lock()
-	defer s.dbLock.Unlock()
 	s.db.Select(&entities, statement, qkint64, qk2int64)
 	return entities, nil
 }
@@ -258,8 +265,6 @@ func (s *Storage) InsertIdentifier(identifier string, tileType quadmap.TileType)
 
 func (s *Storage) HasIdentifier(identifier string, tileType quadmap.TileType) bool {
 
-	s.dbLock.Lock()
-	defer s.dbLock.Unlock()
 	var existingIdentifier []string
 	err := s.db.Select(&existingIdentifier, `SELECT identifier  FROM processed WHERE identifier = $1 AND tiletype = $2`, identifier, tileType)
 	if err != nil {

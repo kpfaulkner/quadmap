@@ -274,15 +274,22 @@ func (qm *QuadMap) GetSlippyBoundsForTileTypeAndZoom(tileType TileType, zoom byt
 // GetAllChildrenForQuadKeyAndZoom returns all quadkeys for a given zoom level including situations where a parent
 // is marked as full.
 func (qm *QuadMap) GetAllChildrenForQuadKeyAndZoom(qk QuadKey, tileType TileType, zoom byte) ([]QuadKey, error) {
+	qm.lock.RLock()
+	defer qm.lock.RUnlock()
+	return qm.getAllChildrenForQuadKeyAndZoomLocked(qk, tileType, zoom)
+}
 
+// getAllChildrenForQuadKeyAndZoomLocked is the recursive body of
+// GetAllChildrenForQuadKeyAndZoom. Callers must hold qm.lock (read or write).
+func (qm *QuadMap) getAllChildrenForQuadKeyAndZoomLocked(qk QuadKey, tileType TileType, zoom byte) ([]QuadKey, error) {
 	if qk.Zoom() == zoom {
 		return []QuadKey{qk}, nil
 	}
 
 	allKeys := []QuadKey{}
 	for _, child := range qk.Children() {
-		childData, err := qm.GetExactTileForQuadKey(child)
-		if errors.Is(err, TileNotFoundError) {
+		childData, ok := qm.QuadKeyMap[child]
+		if !ok {
 			continue
 		}
 		hasTileType, isFull := childData.HasTileTypeAndFull(tileType)
@@ -295,7 +302,7 @@ func (qm *QuadMap) GetAllChildrenForQuadKeyAndZoom(qk QuadKey, tileType TileType
 			}
 
 			// check children of this child
-			childKeys, err := qm.GetAllChildrenForQuadKeyAndZoom(child, tileType, zoom)
+			childKeys, err := qm.getAllChildrenForQuadKeyAndZoomLocked(child, tileType, zoom)
 			if err != nil {
 				return nil, err
 			}
@@ -318,12 +325,12 @@ func (qm *QuadMap) IsTileCoveredForSlippyCoordsAndTileTypeTopDown(x uint32, y ui
 
 	//allAncestors := quadKey.GetAllAncestorsAndSelf()
 
+	qm.lock.RLock()
+	defer qm.lock.RUnlock()
+
 	qk := quadKey
 	for {
-		qm.lock.RLock()
-		t, ok := qm.QuadKeyMap[qk]
-		qm.lock.RUnlock()
-		if ok {
+		if t, ok := qm.QuadKeyMap[qk]; ok {
 
 			// if at target zoom level and match... then true
 			if t.QuadKey.Zoom() == z {

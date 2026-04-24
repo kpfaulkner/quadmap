@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"slices"
 
 	"github.com/peterstace/simplefeatures/geom"
 )
@@ -79,75 +78,64 @@ func (q QuadKey) IsAncestorOf(desc QuadKey) bool {
 	return q.Zoom() <= desc.Zoom() && q.Range().Contains(desc)
 }
 
-// Children get all the quadkeys for the 4 children of the passed quadkey
-func (q QuadKey) Children() []QuadKey {
-	var children []QuadKey
-	for i := 0; i < 4; i++ {
-		child, _ := q.ChildAtPos(i)
-		children = append(children, child)
+// Children get all the quadkeys for the 4 children of the passed quadkey.
+// Callers must ensure q.Zoom() < MaxZoom; no validation is performed.
+func (q QuadKey) Children() [4]QuadKey {
+	// The parent's next two bits (one level deeper) are guaranteed zero,
+	// and the low 5 bits hold zoom Z with no risk of carry for Z < 31,
+	// so q+1 both sets the child's zoom bits and leaves the new position
+	// bits cleared, ready to be OR-ed in below.
+	shift := 62 - 2*(q&zoomMask)
+	base := q + 1
+	return [4]QuadKey{
+		base,
+		base | (0b01 << shift),
+		base | (0b10 << shift),
+		base | (0b11 << shift),
 	}
-	return children
 }
 
-// GenerateQuadKeyIndexFromSlippy generates the quadkey index from slippy coords
-// If zoom level is < MinZoomLevel or > MaxZoomLevel return error.
-// Only generate/care about bits 63 -> 32..
-// Although inefficient, we generate entire quadkey (zoom 1 -> zoomLevel) but then
-// shift left to trim off the first 9 zoom levels. This is because I might want
-// to repurpose the generic quad key generation for later.
+// GenerateQuadKeyIndexFromSlippy generates the quadkey index from slippy coords.
+// Returns an error if zoomLevel is outside [MinZoom, MaxZoom].
+// The tile portion is a Morton (Z-order) interleave of y (odd bit positions)
+// and x (even bit positions), left-aligned into bits 63..(64-2z).
 func GenerateQuadKeyIndexFromSlippy(x uint32, y uint32, zoomLevel byte) (QuadKey, error) {
-
 	if zoomLevel < MinZoom || zoomLevel > MaxZoom {
 		return 0, errors.New("invalid zoom level")
 	}
-	var binaryQuadkey QuadKey
-	for i := zoomLevel; i > 0; i-- {
-		var mask uint32 = 1 << (i - 1)
-		var bitLocation QuadKey = 64 - (QuadKey(zoomLevel-i+1) * 2) + 1
-		if x&mask != 0 {
-			binaryQuadkey |= 0b1 << (bitLocation - 1)
-		}
-		if y&mask != 0 {
-			binaryQuadkey |= 0b1 << bitLocation
-		}
-	}
-
-	binaryQuadkey |= QuadKey(zoomLevel)
-	return binaryQuadkey, nil
+	morton := spreadBits(x) | (spreadBits(y) << 1)
+	return QuadKey(morton<<(64-2*zoomLevel)) | QuadKey(zoomLevel), nil
 }
 
-// SlippyCoords generates the slippy coords from quadkey index
-// Needs to take into account that quadkey starts at zoom level 10.
+// SlippyCoords returns the (x, y, z) slippy coords for the quadkey.
 func (q QuadKey) SlippyCoords() (uint32, uint32, byte) {
-	var x uint32
-	var y uint32
-
 	zoomLevel := q.Zoom()
+	morton := uint64(q) >> (64 - 2*zoomLevel)
+	return compactBits(morton), compactBits(morton >> 1), zoomLevel
+}
 
-	minPos := 64 - (int(zoomLevel) * 2)
-	for i := 63; i > minPos; i -= 2 {
+// spreadBits spreads the low 32 bits of v into the even bit positions
+// (0, 2, 4, ..., 62) of the result. Inverse of compactBits.
+func spreadBits(v uint32) uint64 {
+	x := uint64(v)
+	x = (x | (x << 16)) & 0x0000FFFF0000FFFF
+	x = (x | (x << 8)) & 0x00FF00FF00FF00FF
+	x = (x | (x << 4)) & 0x0F0F0F0F0F0F0F0F
+	x = (x | (x << 2)) & 0x3333333333333333
+	x = (x | (x << 1)) & 0x5555555555555555
+	return x
+}
 
-		firstBit := (q >> i) & 1
-		secondBit := (q >> (i - 1)) & 1
-		twoBits := (firstBit << 1) | secondBit
-		switch twoBits {
-
-		case 0b01:
-			x += 1
-		case 0b10:
-			y += 1
-		case 0b11:
-			x += 1
-			y += 1
-		}
-		x = x << 1
-		y = y << 1
-	}
-
-	// undo last shift.
-	x = x >> 1
-	y = y >> 1
-	return x, y, zoomLevel
+// compactBits gathers bits at even positions (0, 2, 4, ..., 62) into the low
+// 32 bits of the result, discarding bits at odd positions.
+func compactBits(x uint64) uint32 {
+	x &= 0x5555555555555555
+	x = (x | (x >> 1)) & 0x3333333333333333
+	x = (x | (x >> 2)) & 0x0F0F0F0F0F0F0F0F
+	x = (x | (x >> 4)) & 0x00FF00FF00FF00FF
+	x = (x | (x >> 8)) & 0x0000FFFF0000FFFF
+	x = (x | (x >> 16)) & 0x00000000FFFFFFFF
+	return uint32(x)
 }
 
 // Zoom get the zoom level of the quadkey
@@ -185,35 +173,38 @@ func (q QuadKey) GetMinMaxEquivForZoomLevel(zoom byte) (QuadKey, QuadKey, error)
 	if currentZoom > zoom {
 		return 0, 0, errors.New("unable to generate min/max zooms")
 	}
-
-	minChild := q
-	maxChild := q
-	for z := byte(0); z < zoom-currentZoom; z++ {
-		minChild, _ = minChild.ChildAtPos(0)
-		maxChild, _ = maxChild.ChildAtPos(3)
+	if zoom > MaxZoom {
+		return 0, 0, errors.New("invalid zoom level")
 	}
+
+	// The tile bits of q occupy positions [64-2*currentZoom, 63]. Descendants
+	// add 2 position bits per level below currentZoom. ChildAtPos(0) appends
+	// 0b00 each level, so the min descendant keeps q's tile bits unchanged and
+	// only swaps in the new zoom. ChildAtPos(3) appends 0b11 each level, so
+	// the max descendant additionally sets all 2*delta position bits just
+	// below q's tile bits.
+	stripZoom := uint64(q) &^ uint64(zoomMask)
+	delta := zoom - currentZoom
+	var addMask uint64
+	if delta > 0 {
+		addMask = ((uint64(1) << (2 * delta)) - 1) << (64 - 2*zoom)
+	}
+	minChild := QuadKey(stripZoom | uint64(zoom))
+	maxChild := QuadKey(stripZoom | addMask | uint64(zoom))
 	return minChild, maxChild, nil
 }
 
 // GetAllAncestorsAndSelf returns all ancestors of given QuadKey
-// including the QuadKey itself
+// including the QuadKey itself, ordered by ascending zoom level
+// (root first, q last).
 func (q QuadKey) GetAllAncestorsAndSelf() []QuadKey {
 	zoom := q.Zoom()
-	var ancestors = make([]QuadKey, zoom)
-	ancestors[0] = q
-	i := 1
-	for {
-		parent, err := q.Parent()
-		if err != nil {
-			break
-		}
-		//ancestors = append(ancestors, parent)
-		ancestors[i] = parent
-		q = parent
+	ancestors := make([]QuadKey, zoom+1)
+	ancestors[zoom] = q
+	for i := int(zoom) - 1; i >= 0; i-- {
+		q, _ = q.Parent()
+		ancestors[i] = q
 	}
-
-	// reverse list so that it's in order of zoom level.
-	slices.Reverse(ancestors)
 	return ancestors
 }
 
