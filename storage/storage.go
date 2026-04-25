@@ -95,7 +95,7 @@ func (s *Storage) GenerateTableName(key quadmap.QuadKey) string {
 	}
 
 	for targetKey.Zoom() > TablePartitionZoomLevel {
-		targetKey, _ = targetKey.Parent()
+		targetKey = targetKey.ParentUnchecked()
 	}
 
 	newTableName := fmt.Sprintf("quadmap_%d", targetKey)

@@ -343,10 +343,10 @@ func (qm *QuadMap) IsTileCoveredForSlippyCoordsAndTileTypeTopDown(x uint32, y ui
 				return true, qk, nil
 			}
 		}
-		qk, err = qk.Parent()
-		if err != nil {
+		if qk.Zoom() == 0 {
 			break
 		}
+		qk = qk.ParentUnchecked()
 	}
 
 	//for _, qk := range allAncestors {

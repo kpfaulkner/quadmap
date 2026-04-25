@@ -42,6 +42,16 @@ func (q QuadKey) Parent() (QuadKey, error) {
 	return parent, nil
 }
 
+// ParentUnchecked returns q's parent. Caller MUST ensure q.Zoom() > 0; no
+// validation is performed. Provided as an inlinable alternative to Parent()
+// for hot loops where the error return blocks inlining and the caller already
+// knows the input is non-root.
+func (q QuadKey) ParentUnchecked() QuadKey {
+	parentZoomLevel := q.Zoom() - 1
+	shift := 64 - (parentZoomLevel * 2)
+	return ((q >> shift) << shift) | QuadKey(parentZoomLevel)
+}
+
 // ChildAtPos where pos is 0-3
 // based off https://learn.microsoft.com/en-us/bingmaps/articles/bing-maps-tile-system?redirectedfrom=MSDN
 func (q QuadKey) ChildAtPos(pos int) (QuadKey, error) {
@@ -200,10 +210,15 @@ func (q QuadKey) GetMinMaxEquivForZoomLevel(zoom byte) (QuadKey, QuadKey, error)
 func (q QuadKey) GetAllAncestorsAndSelf() []QuadKey {
 	zoom := q.Zoom()
 	ancestors := make([]QuadKey, zoom+1)
-	ancestors[zoom] = q
-	for i := int(zoom) - 1; i >= 0; i-- {
-		q, _ = q.Parent()
-		ancestors[i] = q
+	// Ancestor at zoom z keeps the top 2*z tile bits of q. Build directly
+	// from q's bits instead of stepping through Parent() — each Parent()
+	// call re-reads zoom and does its own shift pair, so the loop is O(z)
+	// avoidable work per level. ancestors[0] is the root (zoom 0, no tile
+	// bits), already zero-initialised.
+	tileBits := uint64(q) &^ uint64(zoomMask)
+	for z := byte(1); z <= zoom; z++ {
+		mask := (^uint64(0)) << (64 - 2*z)
+		ancestors[z] = QuadKey(tileBits&mask) | QuadKey(z)
 	}
 	return ancestors
 }
