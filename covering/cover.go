@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 
 	"github.com/kpfaulkner/quadmap/quadmap"
@@ -39,21 +40,56 @@ func intersection(qk quadmap.QuadKey, g geom.Geometry) (coveringTile, bool, erro
 	if err != nil {
 		return coveringTile{}, false, err
 	}
-	intersection, err := geom.Intersection(g, tileEnv.AsGeometry())
+	tileGeom := tileEnv.AsGeometry()
+
+	// Fast path: if g fully covers the tile, outsideArea is exactly 0. This
+	// avoids both the cost of geom.Intersection and the float-precision drift
+	// in `tileEnv.Area() - inter.Area()` that would otherwise leave a
+	// fully-covered tile with a tiny non-zero outsideArea and cause the heap
+	// to subdivide it needlessly.
+	covers, err := geom.Covers(g, tileGeom)
 	if err != nil {
 		return coveringTile{}, false, err
 	}
-	if intersection.IsEmpty() {
+	if covers {
+		return coveringTile{qk, 0}, true, nil
+	}
+
+	inter, err := geom.Intersection(g, tileGeom)
+	if err != nil {
+		return coveringTile{}, false, err
+	}
+	if inter.IsEmpty() {
 		return coveringTile{}, false, nil
 	}
 	// TODO: correct area for web mercator distortion? Won't matter in most cases.
-	return coveringTile{qk, tileEnv.Area() - intersection.Area()}, true, nil
+	return coveringTile{qk, tileEnv.Area() - inter.Area()}, true, nil
 }
 
 // ExteriorCovering returns a set of QuadKeys that approximates a Geometry
 // with no more than maxTiles keys. The covering fully covers the geometry,
 // but may also include some area outside it.
-func ExteriorCovering(g geom.Geometry, maxTiles int) ([]quadmap.QuadKey, error) { // TODO: minZoom
+func ExteriorCovering(g geom.Geometry, maxTiles int) ([]quadmap.QuadKey, error) {
+	return exteriorCovering(g, maxTiles, quadmap.MaxZoom)
+}
+
+// ExteriorCoveringNoMax returns a covering with no cap on the number of tiles,
+// subdividing down to (but not past) maxZoom. The covering fully covers the
+// geometry, but may also include some area outside it.
+func ExteriorCoveringNoMax(g geom.Geometry, maxZoom byte) ([]quadmap.QuadKey, error) {
+	return exteriorCovering(g, math.MaxInt, maxZoom)
+}
+
+// exteriorCovering is the shared engine. It repeatedly subdivides the cell
+// with the largest area outside g (priority-queue order) until one of:
+//   - the worst remaining cell has outsideArea == 0 (covering is fully inside g);
+//   - the worst remaining cell is at maxZoom (no further precision available);
+//   - subdividing would push the cell count past maxTiles.
+//
+// pq is ordered by outsideArea descending, so when the top cell can't be
+// improved no other cell can either — that's why pushing it back and breaking
+// is sufficient to terminate.
+func exteriorCovering(g geom.Geometry, maxTiles int, maxZoom byte) ([]quadmap.QuadKey, error) {
 	score, ok, err := intersection(0, g)
 	if err != nil {
 		return nil, err
@@ -68,7 +104,7 @@ func ExteriorCovering(g geom.Geometry, maxTiles int) ([]quadmap.QuadKey, error) 
 			heap.Push(&pq, cell)
 			break
 		}
-		if _, _, z := cell.qk.SlippyCoords(); z >= quadmap.MaxZoom {
+		if cell.qk.Zoom() >= maxZoom {
 			heap.Push(&pq, cell)
 			break
 		}
@@ -97,51 +133,11 @@ func ExteriorCovering(g geom.Geometry, maxTiles int) ([]quadmap.QuadKey, error) 
 	}
 	return cover, nil
 }
-func ExteriorCoveringNoMax(g geom.Geometry, minZoom uint8) ([]quadmap.QuadKey, error) {
-	score, ok, err := intersection(0, g)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return nil, nil
-	}
-	pq := priorityQueue{score}
-	for len(pq) > 0 {
-		cell := heap.Pop(&pq).(coveringTile)
-		if cell.outsideArea == 0 {
-			heap.Push(&pq, cell)
-			break
-		}
-		if _, _, z := cell.qk.SlippyCoords(); z >= minZoom {
-			heap.Push(&pq, cell)
-			break
-		}
 
-		var next []coveringTile
-		for _, ch := range cell.qk.Children() {
-			score, overlap, err := intersection(ch, g)
-			if err != nil {
-				return nil, err
-			}
-			if overlap {
-				next = append(next, score)
-			}
-		}
-		//if len(pq)+len(next) > maxTiles {
-		//	heap.Push(&pq, cell)
-		//	break
-		//}
-		for _, c := range next {
-			heap.Push(&pq, c)
-		}
-	}
-	cover := make([]quadmap.QuadKey, len(pq))
-	for i, c := range pq {
-		cover[i] = c.qk
-	}
-	return cover, nil
-}
-
+// AllAncestors returns the deduplicated set of QuadKeys reachable by walking
+// up from each key in quadKeys until reaching a key whose zoom is <= minZoom
+// (which itself is excluded). The result is sorted ascending so callers get a
+// deterministic order independent of Go's map-iteration randomisation.
 func AllAncestors(quadKeys []quadmap.QuadKey, minZoom byte) ([]quadmap.QuadKey, error) {
 	seen := make(map[quadmap.QuadKey]bool)
 	for _, qk := range quadKeys {
@@ -164,6 +160,7 @@ func AllAncestors(quadKeys []quadmap.QuadKey, minZoom byte) ([]quadmap.QuadKey, 
 	for c := range seen {
 		ancestors = append(ancestors, c)
 	}
+	sort.Slice(ancestors, func(i, j int) bool { return ancestors[i] < ancestors[j] })
 	return ancestors, nil
 }
 
@@ -186,20 +183,21 @@ func SearchRanges(quadKeys []quadmap.QuadKey, minZoom byte) ([]quadmap.QuadKeyRa
 	for _, a := range ancestors {
 		ranges = append(ranges, a.SingleRange())
 	}
+	if len(ranges) == 0 {
+		return nil, nil
+	}
 	sort.Slice(ranges, func(i, j int) bool { return ranges[i].Start < ranges[j].Start })
 
+	// Two-pointer compaction: i is the write head into the merged prefix,
+	// j scans forward. ranges[i] absorbs ranges[j] when they overlap or are
+	// contiguous; otherwise ranges[j] is written to ranges[i+1].
 	i := 0
-	for j := range ranges {
-		rj := &ranges[j]
-		if i == j {
-			continue
-		}
-
+	for j := 1; j < len(ranges); j++ {
 		ri := &ranges[i]
+		rj := &ranges[j]
 		if ri.End >= rj.Start || // ranges overlap
 			ri.End == rj.Start-1 { // ranges are contiguous (beware overflow)
 			if ri.End < rj.End {
-				// rj is bigger; extend ri
 				ri.End = rj.End
 			}
 			continue
