@@ -13,16 +13,16 @@ const (
 	quadKey QuadKey = 0b1101110110110000000000000000000000000000000000000000000000000110
 
 	// children of QuadKey. Note bits 12 and 13 as well as zoom at end.
-	Child0 QuadKey = 0b1101110110110000000000000000000000000000000000000000000000000111
-	Child1 QuadKey = 0b1101110110110100000000000000000000000000000000000000000000000111
-	Child2 QuadKey = 0b1101110110111000000000000000000000000000000000000000000000000111
-	Child3 QuadKey = 0b1101110110111100000000000000000000000000000000000000000000000111
+	child0 QuadKey = 0b1101110110110000000000000000000000000000000000000000000000000111
+	child1 QuadKey = 0b1101110110110100000000000000000000000000000000000000000000000111
+	child2 QuadKey = 0b1101110110111000000000000000000000000000000000000000000000000111
+	child3 QuadKey = 0b1101110110111100000000000000000000000000000000000000000000000111
 
 	// MinChild (top left) of QuadKey (above) at level 21
-	MinChildZoom21 QuadKey = 0b1101110110110000000000000000000000000000000000000000000000010101
+	minChildZoom21 QuadKey = 0b1101110110110000000000000000000000000000000000000000000000010101
 
 	// MaxChild (bottom right) of QuadKey (above) at level 21
-	MaxChildZoom21 QuadKey = 0b1101110110111111111111111111111111111111110000000000000000010101
+	maxChildZoom21 QuadKey = 0b1101110110111111111111111111111111111111110000000000000000010101
 
 	// Parent is same as Quadkey but bits 10-11 are zeroed and length (at end of binary) now reads 5
 	parent QuadKey = 0b1101110110000000000000000000000000000000000000000000000000000101
@@ -119,22 +119,22 @@ func TestGetChildQuadKeyForPos(t *testing.T) {
 
 	childPos0, err := quadKey.ChildAtPos(0)
 	assert.Nil(t, err, "Should not have error when getting child quadkey")
-	assert.Equal(t, Child0, childPos0, "Child quadkey incorrect")
+	assert.Equal(t, child0, childPos0, "Child quadkey incorrect")
 	assert.Equal(t, uint8(7), childPos0.Zoom(), "Child zoom level should be 7")
 
 	childPos1, err := quadKey.ChildAtPos(1)
 	assert.Nil(t, err, "Should not have error when getting child quadkey")
-	assert.Equal(t, Child1, childPos1, "Child quadkey incorrect")
+	assert.Equal(t, child1, childPos1, "Child quadkey incorrect")
 	assert.Equal(t, uint8(7), childPos1.Zoom(), "Child zoom level should be 7")
 
 	childPos2, err := quadKey.ChildAtPos(2)
 	assert.Nil(t, err, "Should not have error when getting child quadkey")
-	assert.Equal(t, Child2, childPos2, "Child quadkey incorrect")
+	assert.Equal(t, child2, childPos2, "Child quadkey incorrect")
 	assert.Equal(t, uint8(7), childPos2.Zoom(), "Child zoom level should be 7")
 
 	childPos3, err := quadKey.ChildAtPos(3)
 	assert.Nil(t, err, "Should not have error when getting child quadkey")
-	assert.Equal(t, Child3, childPos3, "Child quadkey incorrect")
+	assert.Equal(t, child3, childPos3, "Child quadkey incorrect")
 	assert.Equal(t, uint8(7), childPos3.Zoom(), "Child zoom level should be 7")
 
 }
@@ -293,13 +293,13 @@ func TestGetMinMaxEquivForZoomLevel(t *testing.T) {
 
 	minChild, maxChild, err := quadKey.GetMinMaxEquivForZoomLevel(7)
 	assert.NoErrorf(t, err, "no error expected")
-	assert.Equal(t, Child0, minChild, "min child incorrect")
-	assert.Equal(t, Child3, maxChild, "max child incorrect")
+	assert.Equal(t, child0, minChild, "min child incorrect")
+	assert.Equal(t, child3, maxChild, "max child incorrect")
 
 	minChild, maxChild, err = quadKey.GetMinMaxEquivForZoomLevel(21)
 	assert.NoErrorf(t, err, "no error expected")
-	assert.Equal(t, MinChildZoom21, minChild, "min child incorrect")
-	assert.Equal(t, MaxChildZoom21, maxChild, "max child incorrect")
+	assert.Equal(t, minChildZoom21, minChild, "min child incorrect")
+	assert.Equal(t, maxChildZoom21, maxChild, "max child incorrect")
 
 }
 
