@@ -1,4 +1,12 @@
 # quadmap
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/kpfaulkner/quadmap.svg)](https://pkg.go.dev/github.com/kpfaulkner/quadmap)
+[![Go Report Card](https://goreportcard.com/badge/github.com/kpfaulkner/quadmap)](https://goreportcard.com/report/github.com/kpfaulkner/quadmap)
+[![Go Coverage](https://github.com/kpfaulkner/quadmap/wiki/coverage.svg)](https://raw.githack.com/wiki/kpfaulkner/quadmap/coverage.html)
+[![Go](https://github.com/kpfaulkner/quadmap/actions/workflows/ci.yaml/badge.svg)](https://github.com/kpfaulkner/quadmap/actions/workflows/ci.yaml)
+
+
+
 Quadtree (kind of) using quad indexes instead of true tree
 
 Based off an idea from https://learn.microsoft.com/en-us/bingmaps/articles/bing-maps-tile-system?redirectedfrom=MSDN
