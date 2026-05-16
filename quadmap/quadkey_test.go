@@ -343,6 +343,68 @@ func TestEnvelope(t *testing.T) {
 	}
 }
 
+// TestRange verifies that QuadKey.Range produces a numeric interval covering
+// q and every descendant in [Start, End]. Start and End themselves aren't
+// valid QuadKeys (the low bits — including the zoom field — are zeroed/set);
+// they're bounds for numeric filtering, not lookup keys.
+func TestRange(t *testing.T) {
+	t.Run("root covers full key space", func(t *testing.T) {
+		r := QuadKey(0).Range()
+		assert.Equal(t, uint64(0), r.Start)
+		assert.Equal(t, uint64(0xFFFFFFFFFFFFFFFF), r.End)
+	})
+
+	t.Run("contains q itself", func(t *testing.T) {
+		qk := mustQK(t, 123, 456, 10)
+		assert.True(t, qk.Range().Contains(qk))
+	})
+
+	t.Run("contains all 4 direct children", func(t *testing.T) {
+		qk := mustQK(t, 5, 5, 5)
+		r := qk.Range()
+		for i, child := range qk.Children() {
+			assert.Truef(t, r.Contains(child),
+				"child pos %d (%#x) should be inside range [%#x..%#x]",
+				i, uint64(child), r.Start, r.End)
+		}
+	})
+
+	t.Run("contains all descendants at deeper zoom", func(t *testing.T) {
+		qk := mustQK(t, 5, 5, 5)
+		r := qk.Range()
+		for _, d := range qk.GetAllPossibleChildrenAtZoom(8) {
+			assert.Truef(t, r.Contains(d), "descendant %#x should be in range", uint64(d))
+		}
+	})
+
+	t.Run("does not contain a sibling tile", func(t *testing.T) {
+		qk := mustQK(t, 5, 5, 5)
+		sibling := mustQK(t, 6, 5, 5)
+		assert.False(t, qk.Range().Contains(sibling))
+	})
+
+	t.Run("width matches the 64-2z low bits", func(t *testing.T) {
+		// End - Start should equal (1<<(64-2z)) - 1 — the low-bit mask.
+		for _, z := range []byte{1, 5, 10, 16, 23} {
+			qk := mustQK(t, 1, 1, z)
+			r := qk.Range()
+			want := (^uint64(0)) >> (uint(z) * 2)
+			assert.Equalf(t, want, r.End-r.Start, "zoom %d range width", z)
+		}
+	})
+
+	t.Run("Start and End align on the 2z-bit boundary", func(t *testing.T) {
+		for _, z := range []byte{1, 5, 16} {
+			qk := mustQK(t, 1, 1, z)
+			r := qk.Range()
+			mask := (^uint64(0)) >> (uint(z) * 2)
+			assert.Equalf(t, uint64(0), r.Start&mask, "zoom %d: Start low bits should be 0", z)
+			assert.Equalf(t, mask, r.End&mask, "zoom %d: End low bits should be all set", z)
+			assert.Equalf(t, r.Start&^mask, r.End&^mask, "zoom %d: Start/End share top 2z bits", z)
+		}
+	})
+}
+
 // TestGetAllPossibleChildrenAtZoom verifies the enumeration of all descendant
 // QuadKeys at a target zoom level. The bit-enumeration algorithm should
 // produce the same sequence as recursively walking Children(), so the test
