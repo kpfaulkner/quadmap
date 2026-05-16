@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -138,6 +139,154 @@ func TestGetChildQuadKeyForPos(t *testing.T) {
 
 }
 
+// TestChildAtPos exercises ChildAtPos error paths and the slippy-coord
+// relationship between a tile and each of its four children. Pos mapping:
+// 0=top-left (2x,2y), 1=top-right (2x+1,2y), 2=bottom-left (2x,2y+1),
+// 3=bottom-right (2x+1,2y+1).
+func TestChildAtPos(t *testing.T) {
+	t.Run("rejects subdivision at MaxZoom", func(t *testing.T) {
+		qk, err := GenerateQuadKeyIndexFromSlippy(0, 0, MaxZoom)
+		require.NoError(t, err)
+		for pos := 0; pos < 4; pos++ {
+			_, err := qk.ChildAtPos(pos)
+			assert.Errorf(t, err, "pos=%d should error at MaxZoom", pos)
+		}
+	})
+
+	t.Run("rejects invalid pos", func(t *testing.T) {
+		parent, err := GenerateQuadKeyIndexFromSlippy(0, 0, 5)
+		require.NoError(t, err)
+		for _, badPos := range []int{-1, 4, 99} {
+			_, err := parent.ChildAtPos(badPos)
+			assert.Errorf(t, err, "pos=%d should be rejected", badPos)
+		}
+	})
+
+	for _, tc := range []struct {
+		name string
+		x, y uint32
+		z    byte
+	}{
+		{"shallow", 0, 0, 1},
+		{"midmap", 60292, 39326, 16},
+		{"near MaxZoom edge", (1 << 23) - 1, (1 << 23) - 1, 23},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			parent, err := GenerateQuadKeyIndexFromSlippy(tc.x, tc.y, tc.z)
+			require.NoError(t, err)
+
+			for _, e := range []struct {
+				pos    int
+				dx, dy uint32
+			}{
+				{0, 0, 0},
+				{1, 1, 0},
+				{2, 0, 1},
+				{3, 1, 1},
+			} {
+				child, err := parent.ChildAtPos(e.pos)
+				require.NoErrorf(t, err, "pos=%d", e.pos)
+				assert.Equalf(t, tc.z+1, child.Zoom(), "child zoom for pos=%d", e.pos)
+
+				cx, cy, cz := child.SlippyCoords()
+				assert.Equalf(t, tc.z+1, cz, "child slippy zoom for pos=%d", e.pos)
+				assert.Equalf(t, 2*tc.x+e.dx, cx, "child x for pos=%d", e.pos)
+				assert.Equalf(t, 2*tc.y+e.dy, cy, "child y for pos=%d", e.pos)
+
+				back, err := child.Parent()
+				require.NoErrorf(t, err, "parent of pos=%d child", e.pos)
+				assert.Equalf(t, parent, back, "parent round-trip for pos=%d", e.pos)
+			}
+		})
+	}
+}
+
+// TestChildren verifies that Children() returns the same four children as
+// ChildAtPos(0..3) in order. Children() is the inlinable hot-path variant of
+// ChildAtPos and the two must stay in sync.
+func TestChildren(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		x, y uint32
+		z    byte
+	}{
+		{"shallow", 0, 0, 1},
+		{"midmap", 60292, 39326, 16},
+		{"just below MaxZoom", (1 << 23) - 1, (1 << 23) - 1, MaxZoom - 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			parent, err := GenerateQuadKeyIndexFromSlippy(tc.x, tc.y, tc.z)
+			require.NoError(t, err)
+
+			kids := parent.Children()
+			for pos := 0; pos < 4; pos++ {
+				want, err := parent.ChildAtPos(pos)
+				require.NoErrorf(t, err, "ChildAtPos(%d)", pos)
+				assert.Equalf(t, want, kids[pos],
+					"Children()[%d] should match ChildAtPos(%d)", pos, pos)
+				assert.Equalf(t, tc.z+1, kids[pos].Zoom(),
+					"child zoom for pos=%d", pos)
+			}
+
+			seen := make(map[QuadKey]struct{}, 4)
+			for _, c := range kids {
+				seen[c] = struct{}{}
+			}
+			assert.Equalf(t, 4, len(seen), "Children() returned duplicates: %v", kids)
+		})
+	}
+}
+
+// TestGetAllAncestorsAndSelf verifies that the returned slice is the chain
+// of ancestors from the root (zoom 0) up to q inclusive, in ascending zoom
+// order. anc[i] must be the unique ancestor at zoom i.
+func TestGetAllAncestorsAndSelf(t *testing.T) {
+	t.Run("root", func(t *testing.T) {
+		root := QuadKey(0)
+		assert.Equal(t, []QuadKey{root}, root.GetAllAncestorsAndSelf())
+	})
+
+	t.Run("known fixture", func(t *testing.T) {
+		anc := quadKey.GetAllAncestorsAndSelf()
+		require.Len(t, anc, int(quadKey.Zoom())+1)
+		assert.Equal(t, QuadKey(0), anc[0], "anc[0] must be the root")
+		assert.Equal(t, parent, anc[5], "anc[5] must equal the fixture parent")
+		assert.Equal(t, quadKey, anc[6], "anc[zoom] must equal q itself")
+	})
+
+	for _, tc := range []struct {
+		name string
+		x, y uint32
+		z    byte
+	}{
+		{"shallow", 0, 0, 1},
+		{"midmap", 60292, 39326, 16},
+		{"MaxZoom", 12345, 67890, MaxZoom},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			qk, err := GenerateQuadKeyIndexFromSlippy(tc.x, tc.y, tc.z)
+			require.NoError(t, err)
+
+			anc := qk.GetAllAncestorsAndSelf()
+			require.Len(t, anc, int(tc.z)+1, "length should be zoom+1")
+			require.Equal(t, QuadKey(0), anc[0], "anc[0] must be the root")
+			require.Equal(t, qk, anc[tc.z], "anc[zoom] must be q itself")
+
+			for i, a := range anc {
+				assert.Equalf(t, byte(i), a.Zoom(), "anc[%d] zoom", i)
+				assert.Truef(t, a.IsAncestorOf(qk),
+					"anc[%d] should be an ancestor of q", i)
+				if i > 0 {
+					back, err := a.Parent()
+					require.NoErrorf(t, err, "Parent(anc[%d])", i)
+					assert.Equalf(t, anc[i-1], back,
+						"Parent(anc[%d]) should equal anc[%d]", i, i-1)
+				}
+			}
+		})
+	}
+}
+
 // TestGetMinMaxEquivForZoomLevel confirms that min/max (top left, bottom right) quadkeys are generated
 // based off an original quadkey and zoom target
 func TestGetMinMaxEquivForZoomLevel(t *testing.T) {
@@ -154,30 +303,117 @@ func TestGetMinMaxEquivForZoomLevel(t *testing.T) {
 
 }
 
-//func TestEnv(t *testing.T) {
-//	for _, tc := range []struct {
-//		qk             QuadKey
-//		minLon, minLat float64
-//		maxLon, maxLat float64
-//	}{
-//		{
-//			qk:     GenerateQuadKeyIndexFromSlippy(60292, 39326, 16),
-//			minLon: 151.19384765625,
-//			minLat: -33.86585445407186,
-//			maxLon: 151.1993408203125,
-//			maxLat: -33.861293113515515,
-//		},
-//	} {
-//		// TODO: QuadKey.String()
-//		t.Run(fmt.Sprint(tc.qk), func(t *testing.T) {
-//			env, err := tc.qk.Envelope()
-//			assert.NoError(t, err)
-//			min, max, ok := env.MinMaxXYs()
-//			assert.True(t, ok)
-//			assert.InDelta(t, tc.minLon, min.X, 1e-9)
-//			assert.InDelta(t, tc.minLat, min.Y, 1e-9)
-//			assert.InDelta(t, tc.maxLon, max.X, 1e-9)
-//			assert.InDelta(t, tc.maxLat, max.Y, 1e-9)
-//		})
-//	}
-//}
+// TestEnvelope verifies that Envelope returns the correct lat/lon bounds for
+// a QuadKey's slippy tile. Covers the Web Mercator pole limit (~85.0511°) at
+// zoom 1 and a known mid-zoom reference (Sydney area at z=16).
+func TestEnvelope(t *testing.T) {
+	const mercatorLat = 85.05112877980659
+	for _, tc := range []struct {
+		name           string
+		x, y           uint32
+		z              byte
+		minLon, minLat float64
+		maxLon, maxLat float64
+	}{
+		{"z=1 NW quadrant", 0, 0, 1, -180, 0, 0, mercatorLat},
+		{"z=1 NE quadrant", 1, 0, 1, 0, 0, 180, mercatorLat},
+		{"z=1 SW quadrant", 0, 1, 1, -180, -mercatorLat, 0, 0},
+		{"z=1 SE quadrant", 1, 1, 1, 0, -mercatorLat, 180, 0},
+		{
+			name: "Sydney z=16",
+			x:    60292, y: 39326, z: 16,
+			minLon: 151.19384765625, minLat: -33.86585445407186,
+			maxLon: 151.1993408203125, maxLat: -33.861293113515515,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			qk, err := GenerateQuadKeyIndexFromSlippy(tc.x, tc.y, tc.z)
+			require.NoError(t, err)
+
+			env, err := qk.Envelope()
+			require.NoError(t, err)
+
+			min, max, ok := env.MinMaxXYs()
+			require.True(t, ok, "envelope should not be empty")
+			assert.InDelta(t, tc.minLon, min.X, 1e-9, "min lon")
+			assert.InDelta(t, tc.minLat, min.Y, 1e-9, "min lat")
+			assert.InDelta(t, tc.maxLon, max.X, 1e-9, "max lon")
+			assert.InDelta(t, tc.maxLat, max.Y, 1e-9, "max lat")
+		})
+	}
+}
+
+// TestGetAllPossibleChildrenAtZoom verifies the enumeration of all descendant
+// QuadKeys at a target zoom level. The bit-enumeration algorithm should
+// produce the same sequence as recursively walking Children(), so the test
+// cross-checks against Children()/ChildAtPos for shallow deltas and against
+// the descendant slippy-coord range for deeper deltas.
+func TestGetAllPossibleChildrenAtZoom(t *testing.T) {
+	sydney, err := GenerateQuadKeyIndexFromSlippy(60292, 39326, 16)
+	require.NoError(t, err)
+
+	t.Run("at maxZoom returns self only", func(t *testing.T) {
+		assert.Equal(t, []QuadKey{sydney}, sydney.GetAllPossibleChildrenAtZoom(16))
+	})
+
+	t.Run("below q.Zoom returns self only", func(t *testing.T) {
+		assert.Equal(t, []QuadKey{sydney}, sydney.GetAllPossibleChildrenAtZoom(10))
+	})
+
+	t.Run("delta 1 matches Children()", func(t *testing.T) {
+		kids := sydney.Children()
+		all := sydney.GetAllPossibleChildrenAtZoom(17)
+		require.Len(t, all, 4)
+		assert.Equal(t, kids[:], all)
+	})
+
+	t.Run("delta 2 grouped by ChildAtPos", func(t *testing.T) {
+		all := sydney.GetAllPossibleChildrenAtZoom(18)
+		require.Len(t, all, 16)
+		for pos := 0; pos < 4; pos++ {
+			child, err := sydney.ChildAtPos(pos)
+			require.NoErrorf(t, err, "ChildAtPos(%d)", pos)
+			sub := child.GetAllPossibleChildrenAtZoom(18)
+			require.Lenf(t, sub, 4, "pos %d sub-block length", pos)
+			assert.Equalf(t, sub, all[pos*4:(pos+1)*4],
+				"block %d should equal recursive ChildAtPos(%d) enumeration", pos, pos)
+		}
+	})
+
+	for _, tc := range []struct {
+		name       string
+		x, y       uint32
+		z, maxZoom byte
+	}{
+		{"z 1 -> 4", 0, 0, 1, 4},
+		{"z 16 -> 18", 60292, 39326, 16, 18},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			qk, err := GenerateQuadKeyIndexFromSlippy(tc.x, tc.y, tc.z)
+			require.NoError(t, err)
+
+			delta := tc.maxZoom - tc.z
+			wantCount := 1 << (2 * delta)
+
+			all := qk.GetAllPossibleChildrenAtZoom(tc.maxZoom)
+			require.Lenf(t, all, wantCount, "count should be 4^delta = %d", wantCount)
+
+			seen := make(map[QuadKey]struct{}, wantCount)
+			xLow, xHigh := tc.x<<delta, (tc.x+1)<<delta
+			yLow, yHigh := tc.y<<delta, (tc.y+1)<<delta
+			for i, c := range all {
+				assert.Equalf(t, tc.maxZoom, c.Zoom(), "result[%d] zoom", i)
+				assert.Truef(t, qk.IsAncestorOf(c),
+					"result[%d]=%#x should be a descendant of q", i, uint64(c))
+				seen[c] = struct{}{}
+
+				cx, cy, _ := c.SlippyCoords()
+				assert.Truef(t, xLow <= cx && cx < xHigh,
+					"result[%d] x=%d outside [%d,%d)", i, cx, xLow, xHigh)
+				assert.Truef(t, yLow <= cy && cy < yHigh,
+					"result[%d] y=%d outside [%d,%d)", i, cy, yLow, yHigh)
+			}
+			assert.Equalf(t, wantCount, len(seen), "all results should be unique")
+		})
+	}
+}
