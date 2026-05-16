@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func setupSuite(t testing.T) func(t testing.T) {
+func setupSuite(t *testing.T) func(t *testing.T) {
 	log.Println("setup suite")
 
-	return func(t testing.T) {
+	return func(t *testing.T) {
 	}
 }
 

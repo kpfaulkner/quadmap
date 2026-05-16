@@ -2,6 +2,8 @@ package covering
 
 import (
 	"container/heap"
+	"encoding/json"
+	"fmt"
 	"sort"
 
 	"github.com/kpfaulkner/quadmap/quadmap"
@@ -207,4 +209,66 @@ func SearchRanges(quadKeys []quadmap.QuadKey, minZoom byte) ([]quadmap.QuadKeyRa
 		ranges[i] = ranges[j]
 	}
 	return ranges[:i+1], nil
+}
+
+// generateGeoJSONFromCoverage renders a coverage of QuadKeys as a GeoJSON
+// FeatureCollection — one Polygon feature per tile, with quadkey / slippy
+// coords attached as properties. Intended for piping into tools like
+// geojson.io to eyeball a covering visually.
+func generateGeoJSONFromCoverage(cover []quadmap.QuadKey) (string, error) {
+	type polygonGeom struct {
+		Type        string         `json:"type"`
+		Coordinates [][][2]float64 `json:"coordinates"`
+	}
+	type feature struct {
+		Type       string         `json:"type"`
+		Geometry   polygonGeom    `json:"geometry"`
+		Properties map[string]any `json:"properties"`
+	}
+	type featureCollection struct {
+		Type     string    `json:"type"`
+		Features []feature `json:"features"`
+	}
+
+	fc := featureCollection{
+		Type:     "FeatureCollection",
+		Features: make([]feature, 0, len(cover)),
+	}
+	for _, qk := range cover {
+		env, err := qk.Envelope()
+		if err != nil {
+			return "", err
+		}
+		min, max, ok := env.MinMaxXYs()
+		if !ok {
+			continue
+		}
+		x, y, z := qk.SlippyCoords()
+		fc.Features = append(fc.Features, feature{
+			Type: "Feature",
+			Geometry: polygonGeom{
+				Type: "Polygon",
+				// GeoJSON exterior ring: CCW, closed (first == last).
+				Coordinates: [][][2]float64{{
+					{min.X, min.Y},
+					{max.X, min.Y},
+					{max.X, max.Y},
+					{min.X, max.Y},
+					{min.X, min.Y},
+				}},
+			},
+			Properties: map[string]any{
+				"quadkey": fmt.Sprintf("0x%016x", uint64(qk)),
+				"x":       x,
+				"y":       y,
+				"z":       z,
+			},
+		})
+	}
+
+	b, err := json.Marshal(fc)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }

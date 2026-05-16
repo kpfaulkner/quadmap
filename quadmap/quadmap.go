@@ -46,15 +46,13 @@ func (qm *QuadMap) SetDataReader(dr DataReader) {
 }
 
 func (qm *QuadMap) GetAllTiles(sorted bool) ([]*Tile, error) {
-
-	allTiles := make([]*Tile, len(qm.QuadKeyMap))
-	i := 0
+	qm.lock.RLock()
+	allTiles := make([]*Tile, 0, len(qm.QuadKeyMap))
 	for _, tile := range qm.QuadKeyMap {
-		allTiles[i] = tile
-		i++
+		allTiles = append(allTiles, tile)
 	}
+	qm.lock.RUnlock()
 
-	// will this kill perf?
 	if sorted {
 		sort.Slice(allTiles, func(i, j int) bool {
 			return allTiles[i].QuadKey < allTiles[j].QuadKey
@@ -145,6 +143,8 @@ func (qm *QuadMap) GetExactTileForQuadKey(quadKey QuadKey) (*Tile, error) {
 // entire quadmap. If this is a common operation we'll need to track/cache this
 // information somewhere. Although for the limited test cases so far it's pretty much instant
 func (qm *QuadMap) NumberOfTilesForZoom(zoom byte) int {
+	qm.lock.RLock()
+	defer qm.lock.RUnlock()
 	count := 0
 	for _, t := range qm.QuadKeyMap {
 		if t.QuadKey.Zoom() == zoom {
@@ -170,6 +170,8 @@ func (qm *QuadMap) GetTilesForTypeAndZoom(tt TileType, zoom byte) []*Tile {
 
 // NumberOfTiles returns number of tiles in quadmap
 func (qm *QuadMap) NumberOfTiles() int {
+	qm.lock.RLock()
+	defer qm.lock.RUnlock()
 	return len(qm.QuadKeyMap)
 }
 
@@ -225,6 +227,8 @@ func (qm *QuadMap) GetSlippyBoundsForTileTypeAndZoom(tileType TileType, zoom byt
 	var maxX uint32 = 0
 	var maxY uint32 = 0
 
+	qm.lock.RLock()
+	defer qm.lock.RUnlock()
 	for quadKey, v := range qm.QuadKeyMap {
 
 		if quadKey == 0 {

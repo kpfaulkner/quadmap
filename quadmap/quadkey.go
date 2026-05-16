@@ -85,7 +85,16 @@ func (q QuadKey) ChildAtPos(pos int) (QuadKey, error) {
 // IsAncestorOf checks whether a QuadKey is an ancestor of (or equal to)
 // another QuadKey.
 func (q QuadKey) IsAncestorOf(desc QuadKey) bool {
-	return q.Zoom() <= desc.Zoom() && q.Range().Contains(desc)
+	// Direct prefix comparison instead of building a QuadKeyRange and calling
+	// Contains. q is an ancestor of desc iff q's zoom is no deeper than
+	// desc's AND the top 2*q.Zoom() bits match. The zoom-guard also rules
+	// out the false-positive case noted in QuadKey.Range().
+	qz := q.Zoom()
+	if qz > desc.Zoom() {
+		return false
+	}
+	shift := 64 - 2*qz
+	return uint64(q)>>shift == uint64(desc)>>shift
 }
 
 // Children get all the quadkeys for the 4 children of the passed quadkey.
@@ -158,15 +167,23 @@ func (q QuadKey) Zoom() byte {
 // Envelope returns the lat/lon bounds of the slippy tile represented by a QuadKey.
 func (q QuadKey) Envelope() (geom.Envelope, error) {
 	x, y, z := q.SlippyCoords()
-	return geom.NewEnvelope([]geom.XY{
-		SlippyTopLeftToLonLat(x, y, z),
-		SlippyTopLeftToLonLat(x+1, y+1, z),
-	}...), nil
+	// Compute n once and call NewEnvelope with explicit args. The previous
+	// `[]geom.XY{...}...` form forced the literal slice to escape; passing
+	// two args lets the compiler stack-allocate the variadic slice.
+	n := float64(uint64(1) << z)
+	tl := slippyToLonLatN(x, y, n)
+	br := slippyToLonLatN(x+1, y+1, n)
+	return geom.NewEnvelope(tl, br), nil
 }
 
+// SlippyTopLeftToLonLat converts a slippy (x, y, z) tile coord to its top-left
+// lon/lat in degrees.
 // From https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames#Tile_numbers_to_lon./lat.
 func SlippyTopLeftToLonLat(x, y uint32, z byte) geom.XY {
-	n := float64(uint64(1) << z)
+	return slippyToLonLatN(x, y, float64(uint64(1)<<z))
+}
+
+func slippyToLonLatN(x, y uint32, n float64) geom.XY {
 	lonDeg := float64(x)/n*360 - 180
 	latRad := math.Atan(math.Sinh(math.Pi * (1 - 2*float64(y)/n)))
 	latDeg := latRad * 180 / math.Pi
