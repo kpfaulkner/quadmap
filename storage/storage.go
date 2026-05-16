@@ -245,10 +245,7 @@ func (s *Storage) SearchQuadKeysWithinQuadKey(qk quadmap.QuadKey) ([]int64, erro
 
 	qkint64 := int64(qk)
 	qk2int64 := int64(qk2)
-	fmt.Printf("qk1 %d\n", qkint64)
-	fmt.Printf("qk2 %d\n", qk2int64)
 	tableName := s.GenerateTableName(qk)
-	fmt.Printf("Searching table %s\n", tableName)
 	statement := fmt.Sprintf("select distinct qm.details_id from %s qm where qm.quadkey >= $1 AND qm.quadkey <= $2;", tableName)
 
 	s.db.Select(&entities, statement, qkint64, qk2int64)
