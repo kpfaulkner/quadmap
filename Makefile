@@ -1,7 +1,7 @@
 
 .PHONY: coverage
 coverage:
-	go test -v -coverprofile cover.out .\quadmap ./covering
+	go test -v -coverprofile cover.out .\quadmap ./covering ./storage
 	go tool cover -html cover.out -o cover.html
 
 .PHONY: test
