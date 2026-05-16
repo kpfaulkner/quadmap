@@ -209,11 +209,11 @@ func SearchRanges(quadKeys []quadmap.QuadKey, minZoom byte) ([]quadmap.QuadKeyRa
 	return ranges[:i+1], nil
 }
 
-// generateGeoJSONFromCoverage renders a coverage of QuadKeys as a GeoJSON
+// ToGeoJSON renders a coverage of QuadKeys as a GeoJSON
 // FeatureCollection — one Polygon feature per tile, with quadkey / slippy
 // coords attached as properties. Intended for piping into tools like
 // geojson.io to eyeball a covering visually.
-func generateGeoJSONFromCoverage(cover []quadmap.QuadKey) (string, error) {
+func ToGeoJSON(cover []quadmap.QuadKey) (string, error) {
 	type polygonGeom struct {
 		Type        string         `json:"type"`
 		Coordinates [][][2]float64 `json:"coordinates"`
