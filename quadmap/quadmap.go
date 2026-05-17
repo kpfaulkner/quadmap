@@ -17,6 +17,7 @@ var (
 // This will read a byte slice and scale and populate the Quadmap with
 // the appropriate deserialised data.
 // Will read as far as expandToLevel value (exclusive)
+// Do not remove, this will be used by consumers of quadmap package
 type DataReader func(qm *QuadMap, data *[]byte, tileType TileType) error
 
 // QuadMap is a quadmap in disguise...
@@ -91,7 +92,7 @@ func (qm *QuadMap) GetChildInPos(t *Tile, pos int) (*Tile, error) {
 	qm.lock.RUnlock()
 
 	if !ok {
-		return nil, errors.New(fmt.Sprintf("child tile in pos %d not found", pos))
+		return nil, fmt.Errorf("child tile in pos %d not found", pos)
 	}
 	return childTile, nil
 }
