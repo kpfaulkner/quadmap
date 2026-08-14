@@ -1,17 +1,35 @@
 package quadmap
 
-type TileType uint16
+type TileType uint32
 
 const (
-	TileTypeVert      TileType = 0b000000000001
-	TileTypeEast      TileType = 0b000000000010
-	TileTypeNorth     TileType = 0b000000000100
-	TileTypeSouth     TileType = 0b00000001000
-	TileTypeWest      TileType = 0b0000010000
-	TileTypeTrueOrtho TileType = 0b0000100000
-	TileTypeDSM       TileType = 0b0001000000
+	TileTypeVert           TileType = 1 << iota // 0
+	TileTypeDEM                                 // 1
+	TileTypeNorth                               // 2
+	TileTypeSouth                               // 3
+	TileTypeEast                                // 4
+	TileTypeWest                                // 5
+	TileTypeVertDetail                          // 6
+	TileTypeDSM                                 // 7
+	TileTypeDTM                                 // 8
+	TileTypeOrthoDEM                            // 9
+	TileTypeOrthoDSM                            // 10
+	TileTypeDetailDEM                           // 11
+	TileTypeDetailDSM                           // 12
+	TileTypeDetailDTM                           // 13
+	TileTypeTrueOrtho                           // 14
+	TileTypeNorthWest                           // 15
+	TileTypeNorthEast                           // 16
+	TileTypeSouthWest                           // 17
+	TileTypeSouthEast                           // 18
+	TileTypeDTMDEM                              // 19
+	TileTypeDetailDTMDEM                        // 20
+	TileTypeOverviewNIR                         // 21
+	TileTypeDetailNIR                           // 22
 
-	TileTypeOffset = 10
+	// TileTypeOffset must be >= number of TileType bits (23) so the
+	// "full" flags (bits 0-22) and "present" flags (bits 23-45) don't overlap.
+	TileTypeOffset = 23
 )
 
 // Tile is a node within a quadmap.
@@ -21,12 +39,13 @@ type Tile struct {
 	QuadKey QuadKey
 
 	// Details holds information about tiletypes, full/empty.. and potentially other info.
-	//		|63-----------20|19-----------10|9----------------0|
-	//		|     unused    |    TileType   |  Tiletype full   |
-	//		|               |               |      flags       |
+	//		|63-----------46|45-----------23|22----------------0|
+	//		|     unused    |    TileType   |  Tiletype full     |
+	//		|    (18 bits)  |   present     |      flags         |
+	//		|               |   (23 bits)   |     (23 bits)      |
 	//
-	// Bits 9 -> 0 (10 bits) are used to indicate full for TileType.
-	// Bits 19 -> 19 (10 bits) are used to indicate TileType.
+	// Bits 22 -> 0 (23 bits) are used to indicate full for TileType.
+	// Bits 45 -> 23 (23 bits) are used to indicate TileType present.
 	Details uint64
 }
 

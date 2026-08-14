@@ -83,14 +83,14 @@ func TestGenerateTileTypesQuery(t *testing.T) {
 	})
 
 	t.Run("single type emits presence-only and presence|self", func(t *testing.T) {
-		// TileTypeVert (1) with TileTypeOffset (10): 1<<10=1024, |1=1025.
-		assert.Equal(t, "1024 , 1025",
+		// TileTypeVert (1) with TileTypeOffset (23): 1<<23=8388608, |1=8388609.
+		assert.Equal(t, "8388608 , 8388609",
 			generateTileTypesQuery([]quadmap.TileType{quadmap.TileTypeVert}))
 	})
 
 	t.Run("multiple types emit pairs joined by commas", func(t *testing.T) {
-		// Vert=1 → 1024,1025; North=4 → 4096,4100.
-		assert.Equal(t, "1024 , 1025 , 4096 , 4100",
+		// Vert=1 -> 8388608,8388609; North=4 -> 33554432,33554436.
+		assert.Equal(t, "8388608 , 8388609 , 33554432 , 33554436",
 			generateTileTypesQuery([]quadmap.TileType{quadmap.TileTypeVert, quadmap.TileTypeNorth}))
 	})
 }
